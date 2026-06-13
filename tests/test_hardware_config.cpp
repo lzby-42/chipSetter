@@ -8,13 +8,33 @@ private slots:
     void testAxisCount();
     void testDiCount();
     void testDoCount();
+    void testAxisNamesCount();
+    void testDiNamesCount();
+    void testDoNamesCount();
     void testAxisIdsDistinct();
+    void testAxisIdsInRange();
     void testDefaultValues();
 };
 
 void TestHardwareConfig::testAxisCount() { QCOMPARE(AXIS_COUNT, 13); }
 void TestHardwareConfig::testDiCount() { QCOMPARE(DI_COUNT, 16); }
 void TestHardwareConfig::testDoCount() { QCOMPARE(DO_COUNT, 4); }
+
+void TestHardwareConfig::testAxisNamesCount() {
+    QStringList names = QStringList AXIS_NAMES;
+    QCOMPARE(names.size(), AXIS_COUNT);
+}
+
+void TestHardwareConfig::testDiNamesCount() {
+    QStringList names = QStringList DI_NAMES;
+    QCOMPARE(names.size(), DI_COUNT);
+}
+
+void TestHardwareConfig::testDoNamesCount() {
+    QStringList names = QStringList DO_NAMES;
+    QCOMPARE(names.size(), DO_COUNT);
+}
+
 void TestHardwareConfig::testAxisIdsDistinct() {
     // Verify all axis IDs are distinct
     QSet<int> ids;
@@ -24,6 +44,19 @@ void TestHardwareConfig::testAxisIdsDistinct() {
         << AXIS_RESERVED_11 << AXIS_RESERVED_12 << AXIS_RESERVED_13;
     QCOMPARE(ids.size(), 13);
 }
+
+void TestHardwareConfig::testAxisIdsInRange() {
+    int ids[] = {
+        AXIS_WAFER_X, AXIS_WAFER_Y, AXIS_DISPENSE_X, AXIS_DISPENSE_Y,
+        AXIS_EJECTOR_Z1, AXIS_EJECTOR_Z2, AXIS_ROTARY_WHEEL,
+        AXIS_RESERVED_8, AXIS_RESERVED_9, AXIS_RESERVED_10,
+        AXIS_RESERVED_11, AXIS_RESERVED_12, AXIS_RESERVED_13
+    };
+    for (int id : ids) {
+        QVERIFY(id >= 1 && id <= AXIS_COUNT);
+    }
+}
+
 void TestHardwareConfig::testDefaultValues() {
     QVERIFY(DEFAULT_VELOCITY > 0);
     QVERIFY(DEFAULT_ACCEL > 0);

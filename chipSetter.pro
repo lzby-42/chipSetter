@@ -3,7 +3,9 @@ TARGET = chipSetter
 TEMPLATE = app
 CONFIG += c++11
 
-INCLUDEPATH += "D:/study/googel/固高网络型运动控制器编程手册20260509/site"
+GNC_SDK_PATH = $$(GNC_SDK)
+isEmpty(GNC_SDK_PATH): GNC_SDK_PATH = $$PWD/../sdk
+INCLUDEPATH += $$GNC_SDK_PATH/site
 
 SOURCES += \
     main.cpp \

@@ -1,5 +1,6 @@
 #include <QApplication>
 #include <QFile>
+#include <QDebug>
 #include "mainwindow.h"
 
 int main(int argc, char *argv[])
@@ -9,11 +10,13 @@ int main(int argc, char *argv[])
     app.setApplicationVersion("1.0.0");
     app.setOrganizationName("ChipSetter");
 
-    QFile styleFile(":/style.qss");
+    QFile styleFile(":/resources/style.qss");
     if (styleFile.open(QFile::ReadOnly | QFile::Text)) {
         QString style = QString::fromUtf8(styleFile.readAll());
         app.setStyleSheet(style);
         styleFile.close();
+    } else {
+        qWarning() << "Failed to load stylesheet: " << styleFile.errorString();
     }
 
     MainWindow mainWindow;
