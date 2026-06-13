@@ -1,0 +1,9 @@
+.superpowers/
+release/
+debug/
+*.o
+moc_*
+ui_*
+qrc_*
+Makefile*
+*.log
