@@ -1,6 +1,6 @@
-QT += core testlib
-CONFIG += c++11 console
-TARGET = test_hardware_config
-INCLUDEPATH += ..
+TEMPLATE = subdirs
+CONFIG += c++11
+SUBDIRS = test_hardware_config test_motor_axis
 
-SOURCES += test_hardware_config.cpp
+test_hardware_config.file = test_hardware_config.pro
+test_motor_axis.file = test_motor_axis.pro

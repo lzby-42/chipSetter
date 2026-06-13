@@ -13,6 +13,7 @@ SOURCES += \
 
 HEADERS += \
     mainwindow.h \
-    core/HardwareConfig.h
+    core/HardwareConfig.h \
+    models/MotorAxis.h
 
 RESOURCES += resources.qrc
