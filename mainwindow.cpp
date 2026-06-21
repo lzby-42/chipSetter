@@ -360,10 +360,10 @@ void MainWindow::connectSignals()
                 }
             });
 
-    // 关机按钮 → 退出应用
+    // 关机按钮 → 进入收尾流程
     connect(m_bottomBar, &BottomBarWidget::shutdownClicked,
-            this, []() {
-                QApplication::quit();
+            this, [this]() {
+                m_processManager->finishCycle();
             });
 
     // 步骤参数编辑 → 更新 ProcessManager
