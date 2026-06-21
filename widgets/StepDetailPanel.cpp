@@ -154,7 +154,7 @@ void StepDetailPanel::showStepDetail(int stepIndex,
 
         m_paramLayout->addWidget(nameLabel, i, 0);
         m_paramLayout->addWidget(valueLabel, i, 1);
-        m_paramLabels.append({nameLabel, valueLabel});
+        m_paramLabels.append(QPair<QLabel*, QLabel*>(nameLabel, valueLabel));
     }
 
     // --- Populate realtime data ---
@@ -170,7 +170,7 @@ void StepDetailPanel::showStepDetail(int stepIndex,
 
         m_realtimeLayout->addWidget(nameLabel, i, 0);
         m_realtimeLayout->addWidget(valueLabel, i, 1);
-        m_realtimeLabels.append({nameLabel, valueLabel});
+        m_realtimeLabels.append(QPair<QLabel*, QLabel*>(nameLabel, valueLabel));
     }
 }
 

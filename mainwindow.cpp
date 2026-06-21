@@ -9,6 +9,10 @@
 #include <QGroupBox>
 #include <QDebug>
 
+#include "widgets/FlowStepBar.h"
+#include "widgets/StepDetailPanel.h"
+#include "widgets/DeviceStatusWidget.h"
+
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , m_currentMode(0)
@@ -197,7 +201,10 @@ void MainWindow::connectSignals()
 
     // ProcessManager realtime data → StepDetailPanel
     connect(m_processManager, &ProcessManager::realtimeDataUpdated,
-            m_production->stepDetailPanel(), &StepDetailPanel::updateRealtimeData);
+            this, [this](int stepIndex, const QVariantMap& data) {
+        m_production->stepDetailPanel()->updateRealtimeData(data);
+        Q_UNUSED(stepIndex);
+    });
 
     // ProcessManager cycle completed → StatsCollector
     connect(m_processManager, &ProcessManager::cycleCompleted,

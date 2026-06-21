@@ -6,6 +6,7 @@
 #include "FlowStepBar.h"
 #include <QHBoxLayout>
 #include <QVBoxLayout>
+#include <QVariant>
 
 FlowStepBar::FlowStepBar(QWidget *parent)
     : QWidget(parent)

@@ -35,7 +35,6 @@ private:
     QLabel* m_connLabel;
     QLabel* m_ioSummaryLabel;
 
-    static const int AXIS_COUNT = 13;
 };
 
 #endif // DEVICESTATUSWIDGET_H
