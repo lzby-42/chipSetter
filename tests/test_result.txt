@@ -1,0 +1,54 @@
+********* Start testing of TestProcessManager *********
+Config: Using QtTest library 5.15.2, Qt 5.15.2 (i386-little_endian-ilp32 shared (dynamic) release build; by GCC 8.1.0), windows 10
+PASS   : TestProcessManager::initTestCase()
+PASS   : TestProcessManager::testInitialState()
+QDEBUG : TestProcessManager::testStartCycle() [ProcessManager] 执行步骤 0 "初始化"
+QDEBUG : TestProcessManager::testStartCycle() [ProcessManager] 启动流程, 当前步骤: 0
+PASS   : TestProcessManager::testStartCycle()
+QDEBUG : TestProcessManager::testStepProgression() [ProcessManager] 执行步骤 0 "初始化"
+QDEBUG : TestProcessManager::testStepProgression() [ProcessManager] 启动流程, 当前步骤: 0
+QDEBUG : TestProcessManager::testStepProgression() [ProcessManager] 步骤完成: "初始化"
+QDEBUG : TestProcessManager::testStepProgression() [ProcessManager] 执行步骤 1 "上料"
+PASS   : TestProcessManager::testStepProgression()
+QDEBUG : TestProcessManager::testLoopBehavior() [ProcessManager] 执行步骤 0 "初始化"
+QDEBUG : TestProcessManager::testLoopBehavior() [ProcessManager] 启动流程, 当前步骤: 0
+QDEBUG : TestProcessManager::testLoopBehavior() [ProcessManager] 步骤完成: "初始化"
+QDEBUG : TestProcessManager::testLoopBehavior() [ProcessManager] 执行步骤 1 "上料"
+QDEBUG : TestProcessManager::testLoopBehavior() [ProcessManager] 步骤完成: "上料"
+QDEBUG : TestProcessManager::testLoopBehavior() [ProcessManager] 执行步骤 2 "定位"
+QDEBUG : TestProcessManager::testLoopBehavior() [ProcessManager] 步骤完成: "定位"
+QDEBUG : TestProcessManager::testLoopBehavior() [ProcessManager] 执行步骤 3 "顶晶"
+QDEBUG : TestProcessManager::testLoopBehavior() [ProcessManager] 步骤完成: "顶晶"
+QDEBUG : TestProcessManager::testLoopBehavior() [ProcessManager] 执行步骤 4 "拾取"
+QDEBUG : TestProcessManager::testLoopBehavior() [ProcessManager] 步骤完成: "拾取"
+QDEBUG : TestProcessManager::testLoopBehavior() [ProcessManager] 执行步骤 5 "点胶"
+QDEBUG : TestProcessManager::testLoopBehavior() [ProcessManager] 步骤完成: "点胶"
+QDEBUG : TestProcessManager::testLoopBehavior() [ProcessManager] 执行步骤 6 "贴装"
+QDEBUG : TestProcessManager::testLoopBehavior() [ProcessManager] 步骤完成: "贴装"
+QDEBUG : TestProcessManager::testLoopBehavior() [ProcessManager] 执行步骤 7 "下料"
+QDEBUG : TestProcessManager::testLoopBehavior() [ProcessManager] 步骤完成: "下料"
+QDEBUG : TestProcessManager::testLoopBehavior() [ProcessManager] 执行步骤 1 "上料"
+QDEBUG : TestProcessManager::testLoopBehavior() [ProcessManager] 自动循环 → 上料 (第 1 件)
+QDEBUG : TestProcessManager::testLoopBehavior() [ProcessManager] 步骤完成: "上料"
+QDEBUG : TestProcessManager::testLoopBehavior() [ProcessManager] 执行步骤 2 "定位"
+PASS   : TestProcessManager::testLoopBehavior()
+QDEBUG : TestProcessManager::testPauseAndResume() [ProcessManager] 执行步骤 0 "初始化"
+QDEBUG : TestProcessManager::testPauseAndResume() [ProcessManager] 启动流程, 当前步骤: 0
+QDEBUG : TestProcessManager::testPauseAndResume() [ProcessManager] 暂停循环
+QDEBUG : TestProcessManager::testPauseAndResume() [ProcessManager] 继续循环
+PASS   : TestProcessManager::testPauseAndResume()
+QDEBUG : TestProcessManager::testFinishCycle() [ProcessManager] 执行步骤 0 "初始化"
+QDEBUG : TestProcessManager::testFinishCycle() [ProcessManager] 启动流程, 当前步骤: 0
+QDEBUG : TestProcessManager::testFinishCycle() [ProcessManager] 执行步骤 8 "收尾"
+QDEBUG : TestProcessManager::testFinishCycle() [ProcessManager] 开始收尾
+QDEBUG : TestProcessManager::testFinishCycle() [ProcessManager] 步骤完成: "收尾"
+QDEBUG : TestProcessManager::testFinishCycle() [ProcessManager] 收尾完成, 流程结束
+PASS   : TestProcessManager::testFinishCycle()
+QDEBUG : TestProcessManager::testEmergencyStop() [ProcessManager] 执行步骤 0 "初始化"
+QDEBUG : TestProcessManager::testEmergencyStop() [ProcessManager] 启动流程, 当前步骤: 0
+QDEBUG : TestProcessManager::testEmergencyStop() [ProcessManager] 急停!
+PASS   : TestProcessManager::testEmergencyStop()
+PASS   : TestProcessManager::testStepDefinitions()
+PASS   : TestProcessManager::cleanupTestCase()
+Totals: 10 passed, 0 failed, 0 skipped, 0 blacklisted, 32014ms
+********* Finished testing of TestProcessManager *********

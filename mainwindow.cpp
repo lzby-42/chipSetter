@@ -81,6 +81,9 @@ void MainWindow::setupLayout()
     mainLayout->setContentsMargins(2, 2, 2, 2);
     mainLayout->setSpacing(2);
 
+    // 状态栏 — 双模式共享, 放在 QStackedWidget 上方
+    mainLayout->addWidget(m_statusBar);
+
     // QStackedWidget: 0=生产, 1=调试
     m_stack = new QStackedWidget(this);
 
@@ -92,8 +95,6 @@ void MainWindow::setupLayout()
     QVBoxLayout* debugLayout = new QVBoxLayout(m_debugPage);
     debugLayout->setContentsMargins(0, 0, 0, 0);
     debugLayout->setSpacing(2);
-
-    debugLayout->addWidget(m_statusBar);
 
     QHBoxLayout* middleRow = new QHBoxLayout();
     middleRow->setSpacing(3);
@@ -342,10 +343,11 @@ void MainWindow::connectSignals()
     // 模式切换 → 切换生产/调试界面
     connect(m_bottomBar, &BottomBarWidget::modeSwitchClicked,
             this, [this]() {
-                m_currentMode = (m_currentMode == 0) ? 1 : 0;
-                m_statusBar->setMode(m_currentMode);
-                m_bottomBar->setMode(m_currentMode);
-                m_production->setMode(m_currentMode);
+                if (m_stack->currentIndex() == 0) {
+                    switchToDebugMode();
+                } else {
+                    switchToProductionMode();
+                }
             });
 }
 
@@ -357,12 +359,18 @@ void MainWindow::switchToProductionMode()
 {
     m_stack->setCurrentIndex(0);
     m_bottomBar->setVisible(true);
+    m_statusBar->setMode(1);       // 自动模式
+    m_bottomBar->setMode(1);
+    m_production->setMode(1);
 }
 
 void MainWindow::switchToDebugMode()
 {
     m_stack->setCurrentIndex(1);
     m_bottomBar->setVisible(true);
+    m_statusBar->setMode(0);       // 手动模式
+    m_bottomBar->setMode(0);
+    m_production->setMode(0);
 }
 
 // ============================================================

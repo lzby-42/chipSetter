@@ -63,13 +63,13 @@ void BottomBarWidget::setupUI()
 
     layout->addStretch();
 
-    // 模式切换
-    m_modeBtn = new QPushButton("手动/自动", this);
+    // 模式切换 (生产 ↔ 调试)
+    m_modeBtn = new QPushButton("⇄ 调试", this);
     m_modeBtn->setFixedSize(90, 28);
     m_modeBtn->setStyleSheet(
-        "QPushButton { background:#333; color:#fff; border:1px solid #555; "
+        "QPushButton { background:#37474f; color:#90a4ae; border:1px solid #555; "
         "border-radius:3px; font-size:10px; }"
-        "QPushButton:hover { background:#444; }");
+        "QPushButton:hover { background:#455a64; color:#fff; }");
     layout->addWidget(m_modeBtn);
 
     // 通讯状态
@@ -98,9 +98,18 @@ void BottomBarWidget::setConnectionStatus(bool connected)
 
 void BottomBarWidget::setMode(int mode)
 {
+    // mode: 0=调试(手动), 1=生产(自动)
     if (mode == 0) {
-        m_modeBtn->setText("手动模式");
+        m_modeBtn->setText("⇄ 生产");
+        m_modeBtn->setStyleSheet(
+            "QPushButton { background:#37474f; color:#90a4ae; border:1px solid #555; "
+            "border-radius:3px; font-size:10px; }"
+            "QPushButton:hover { background:#455a64; color:#fff; }");
     } else {
-        m_modeBtn->setText("自动模式");
+        m_modeBtn->setText("⇄ 调试");
+        m_modeBtn->setStyleSheet(
+            "QPushButton { background:#1b5e20; color:#81c784; border:1px solid #2e7d32; "
+            "border-radius:3px; font-size:10px; }"
+            "QPushButton:hover { background:#2e7d32; color:#a5d6a7; }");
     }
 }
