@@ -10,12 +10,46 @@ INCLUDEPATH += $$GNC_SDK_PATH/site
 SOURCES += \
     main.cpp \
     mainwindow.cpp \
-    core/ProcessManager.cpp
+    core/GncController.cpp \
+    core/MotorManager.cpp \
+    core/IoManager.cpp \
+    core/AlarmLogger.cpp \
+    core/StatsCollector.cpp \
+    core/ProcessManager.cpp \
+    widgets/StatusBarWidget.cpp \
+    widgets/MotorPtpWidget.cpp \
+    widgets/MotorParamWidget.cpp \
+    widgets/IoMonitorWidget.cpp \
+    widgets/AlarmListWidget.cpp \
+    widgets/StatsWidget.cpp \
+    widgets/BottomBarWidget.cpp \
+    widgets/ProductionWidget.cpp \
+    widgets/FlowStepBar.cpp \
+    widgets/StepDetailPanel.cpp \
+    widgets/DeviceStatusWidget.cpp
 
 HEADERS += \
     mainwindow.h \
     core/HardwareConfig.h \
+    models/MotorAxis.h \
+    models/IoSignal.h \
+    models/AlarmRecord.h \
+    core/GncController.h \
+    core/MotorManager.h \
+    core/IoManager.h \
+    core/AlarmLogger.h \
+    core/StatsCollector.h \
     core/ProcessManager.h \
-    models/MotorAxis.h
+    widgets/StatusBarWidget.h \
+    widgets/MotorPtpWidget.h \
+    widgets/MotorParamWidget.h \
+    widgets/IoMonitorWidget.h \
+    widgets/AlarmListWidget.h \
+    widgets/StatsWidget.h \
+    widgets/BottomBarWidget.h \
+    widgets/ProductionWidget.h \
+    widgets/FlowStepBar.h \
+    widgets/StepDetailPanel.h \
+    widgets/DeviceStatusWidget.h
 
 RESOURCES += resources.qrc
