@@ -9,11 +9,13 @@ INCLUDEPATH += $$GNC_SDK_PATH/site
 
 SOURCES += \
     main.cpp \
-    mainwindow.cpp
+    mainwindow.cpp \
+    core/ProcessManager.cpp
 
 HEADERS += \
     mainwindow.h \
     core/HardwareConfig.h \
+    core/ProcessManager.h \
     models/MotorAxis.h
 
 RESOURCES += resources.qrc
