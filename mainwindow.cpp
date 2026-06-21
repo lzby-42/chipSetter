@@ -340,7 +340,7 @@ void MainWindow::connectSignals()
         m_processManager->emergencyStop();
     });
 
-    // 模式切换 → 切换生产/调试界面
+    // 模式切换 → 切换生产/调试界面 (操作栏按钮)
     connect(m_bottomBar, &BottomBarWidget::modeSwitchClicked,
             this, [this]() {
                 if (m_stack->currentIndex() == 0) {
@@ -349,6 +349,30 @@ void MainWindow::connectSignals()
                     switchToProductionMode();
                 }
             });
+
+    // 模式切换 → 状态栏模式灯也可点击切换
+    connect(m_statusBar, &StatusBarWidget::modeClicked,
+            this, [this]() {
+                if (m_stack->currentIndex() == 0) {
+                    switchToDebugMode();
+                } else {
+                    switchToProductionMode();
+                }
+            });
+
+    // 关机按钮 → 退出应用
+    connect(m_bottomBar, &BottomBarWidget::shutdownClicked,
+            this, []() {
+                QApplication::quit();
+            });
+
+    // 步骤参数编辑 → 更新 ProcessManager
+    connect(m_production->stepDetailPanel(), &StepDetailPanel::paramEdited,
+            this, [this](int stepIndex, const QString& name, double value) {
+        ProcessManager::StepDef def = m_processManager->stepDef(stepIndex);
+        def.defaultParams[name] = value;
+        qDebug() << "[MainWindow] 参数修改: 步骤" << stepIndex << name << "=" << value;
+    });
 }
 
 // ============================================================

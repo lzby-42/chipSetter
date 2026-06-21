@@ -33,12 +33,15 @@ void StatusBarWidget::setupUI()
 
     layout->addStretch();
 
-    // 模式标签
-    m_modeLabel = new QLabel("自动模式", this);
-    m_modeLabel->setStyleSheet(
-        "background:#00e676; color:#000000; padding:2px 12px; "
-        "border-radius:3px; font-weight:bold; font-size:10px;");
-    layout->addWidget(m_modeLabel);
+    // 模式标签 (可点击切换)
+    m_modeBtn = new QPushButton("自动模式", this);
+    m_modeBtn->setStyleSheet(
+        "QPushButton { background:#00e676; color:#000000; padding:2px 12px; "
+        "border:none; border-radius:3px; font-weight:bold; font-size:10px; }"
+        "QPushButton:hover { background:#00c853; }");
+    m_modeBtn->setCursor(Qt::PointingHandCursor);
+    connect(m_modeBtn, &QPushButton::clicked, this, &StatusBarWidget::modeClicked);
+    layout->addWidget(m_modeBtn);
 
     // 运行状态
     m_statusLabel = new QLabel("运行中", this);
@@ -71,15 +74,17 @@ void StatusBarWidget::setupUI()
 void StatusBarWidget::setMode(int mode)
 {
     if (mode == 0) {
-        m_modeLabel->setText("手动模式");
-        m_modeLabel->setStyleSheet(
-            "background:#e65100; color:#ffffff; padding:2px 12px; "
-            "border-radius:3px; font-weight:bold; font-size:10px;");
+        m_modeBtn->setText("手动模式");
+        m_modeBtn->setStyleSheet(
+            "QPushButton { background:#e65100; color:#ffffff; padding:2px 12px; "
+            "border:none; border-radius:3px; font-weight:bold; font-size:10px; }"
+            "QPushButton:hover { background:#ef6c00; }");
     } else {
-        m_modeLabel->setText("自动模式");
-        m_modeLabel->setStyleSheet(
-            "background:#00e676; color:#000000; padding:2px 12px; "
-            "border-radius:3px; font-weight:bold; font-size:10px;");
+        m_modeBtn->setText("自动模式");
+        m_modeBtn->setStyleSheet(
+            "QPushButton { background:#00e676; color:#000000; padding:2px 12px; "
+            "border:none; border-radius:3px; font-weight:bold; font-size:10px; }"
+            "QPushButton:hover { background:#00c853; }");
     }
 }
 

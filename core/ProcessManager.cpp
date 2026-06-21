@@ -378,6 +378,12 @@ void ProcessManager::completeCurrentStep()
             return;
         }
 
+        // 重置所有循环步骤为待执行 (新循环开始)
+        for (int i = LOOP_START; i <= LOOP_END; ++i) {
+            m_stepStates[i] = PENDING;
+            emit stepStateChanged(i, static_cast<int>(PENDING));
+        }
+
         // 自动回到循环起点 (上料)
         executeStep(LOOP_START);
         qDebug() << "[ProcessManager] 自动循环 → 上料 (第" << m_cycleCount << "件)";

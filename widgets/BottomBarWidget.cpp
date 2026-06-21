@@ -61,6 +61,15 @@ void BottomBarWidget::setupUI()
         "QPushButton:hover { background:#455a64; }");
     layout->addWidget(m_resetBtn);
 
+    // 关机
+    m_shutdownBtn = new QPushButton("⏻ 关机", this);
+    m_shutdownBtn->setFixedSize(80, 28);
+    m_shutdownBtn->setStyleSheet(
+        "QPushButton { background:#555; color:#ccc; border:1px solid #666; "
+        "border-radius:3px; font-size:10px; }"
+        "QPushButton:hover { background:#777; }");
+    layout->addWidget(m_shutdownBtn);
+
     layout->addStretch();
 
     // 模式切换 (生产 ↔ 调试)
@@ -82,6 +91,7 @@ void BottomBarWidget::setupUI()
     connect(m_startBtn,      &QPushButton::clicked, this, &BottomBarWidget::startClicked);
     connect(m_pauseBtn,      &QPushButton::clicked, this, &BottomBarWidget::pauseClicked);
     connect(m_resetBtn,      &QPushButton::clicked, this, &BottomBarWidget::resetClicked);
+    connect(m_shutdownBtn,   &QPushButton::clicked, this, &BottomBarWidget::shutdownClicked);
     connect(m_modeBtn,       &QPushButton::clicked, this, &BottomBarWidget::modeSwitchClicked);
 }
 

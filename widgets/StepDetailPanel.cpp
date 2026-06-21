@@ -141,20 +141,35 @@ void StepDetailPanel::showStepDetail(int stepIndex,
         m_substepLabels.append(label);
     }
 
-    // --- Populate params ---
+    // --- Populate params (editable) ---
     QStringList paramKeys = params.keys();
     for (int i = 0; i < paramKeys.size(); ++i) {
         QLabel* nameLabel = new QLabel(paramKeys[i], this);
         nameLabel->setStyleSheet("color:#78909c; font-size:9px; border:none;");
 
-        QLabel* valueLabel = new QLabel(
-            params[paramKeys[i]].toString(), this);
-        valueLabel->setStyleSheet("color:#fff; font-size:9px; border:none;");
-        valueLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        QLineEdit* valueEdit = new QLineEdit(this);
+        valueEdit->setText(params[paramKeys[i]].toString());
+        valueEdit->setStyleSheet(
+            "QLineEdit { background:#1e1e30; color:#ffd740; border:1px solid #444; "
+            "border-radius:2px; padding:2px 4px; font-size:9px; }"
+            "QLineEdit:focus { border-color:#64b5f6; }");
+        valueEdit->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        valueEdit->setFixedWidth(80);
+
+        // Emit signal when user edits a param
+        QString pName = paramKeys[i];
+        int sIdx = stepIndex;
+        connect(valueEdit, &QLineEdit::editingFinished, this, [this, sIdx, pName, valueEdit]() {
+            bool ok;
+            double val = valueEdit->text().toDouble(&ok);
+            if (ok) {
+                emit paramEdited(sIdx, pName, val);
+            }
+        });
 
         m_paramLayout->addWidget(nameLabel, i, 0);
-        m_paramLayout->addWidget(valueLabel, i, 1);
-        m_paramLabels.append(QPair<QLabel*, QLabel*>(nameLabel, valueLabel));
+        m_paramLayout->addWidget(valueEdit, i, 1);
+        m_paramValues.append(QPair<QLabel*, QLineEdit*>(nameLabel, valueEdit));
     }
 
     // --- Populate realtime data ---
@@ -218,13 +233,13 @@ void StepDetailPanel::clearContent()
     }
     m_substepLabels.clear();
 
-    for (auto& pair : m_paramLabels) {
+    for (auto& pair : m_paramValues) {
         m_paramLayout->removeWidget(pair.first);
         m_paramLayout->removeWidget(pair.second);
         delete pair.first;
         delete pair.second;
     }
-    m_paramLabels.clear();
+    m_paramValues.clear();
 
     for (auto& pair : m_realtimeLabels) {
         m_realtimeLayout->removeWidget(pair.first);

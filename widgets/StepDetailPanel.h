@@ -8,6 +8,7 @@
 
 #include <QWidget>
 #include <QLabel>
+#include <QLineEdit>
 #include <QVBoxLayout>
 #include <QGridLayout>
 #include <QStringList>
@@ -35,6 +36,10 @@ public slots:
     void updateSubstepState(int stepIndex, int substepIndex, int state);
     void updateRealtimeData(const QVariantMap& data);
 
+signals:
+    // 用户编辑了步骤参数
+    void paramEdited(int stepIndex, const QString& name, double value);
+
 private:
     void setupUI();
     void clearContent();
@@ -47,10 +52,10 @@ private:
     QVBoxLayout* m_substepLayout;
     QVector<QLabel*> m_substepLabels;
 
-    // Middle column: params
+    // Middle column: params (name label + editable value)
     QLabel*      m_paramTitle;
     QGridLayout* m_paramLayout;
-    QVector<QPair<QLabel*, QLabel*>> m_paramLabels;
+    QVector<QPair<QLabel*, QLineEdit*>> m_paramValues;
 
     // Right column: realtime status
     QLabel*      m_realtimeTitle;

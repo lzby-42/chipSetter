@@ -27,7 +27,8 @@ signals:
     void startClicked();
     void pauseClicked();
     void resetClicked();
-    void modeSwitchClicked();                   // 请求切换模式
+    void modeSwitchClicked();
+    void shutdownClicked();                     // 关机
 
 private:
     void setupUI();
@@ -36,6 +37,7 @@ private:
     QPushButton* m_startBtn;
     QPushButton* m_pauseBtn;
     QPushButton* m_resetBtn;
+    QPushButton* m_shutdownBtn;
     QPushButton* m_modeBtn;
     QLabel*      m_connLabel;
 };
