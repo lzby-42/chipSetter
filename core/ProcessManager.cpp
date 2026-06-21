@@ -361,8 +361,15 @@ void ProcessManager::completeCurrentStep()
         m_running = false;
         m_currentStepIdx = -1;
         emit currentStepChanged(-1);
+
+        // 收尾完成 → 全部重置为灰色, 下次从头开始
+        for (int i = 0; i < STEP_COUNT; ++i) {
+            m_stepStates[i] = PENDING;
+            emit stepStateChanged(i, static_cast<int>(PENDING));
+        }
+
         emit allFinished();
-        qDebug() << "[ProcessManager] 收尾完成, 流程结束";
+        qDebug() << "[ProcessManager] 收尾完成, 全部重置";
         return;
     }
 
