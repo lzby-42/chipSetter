@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(**/qt/**)",
+      "Bash(/d/tool/**)",
+      "Bash(qmake **)",
+      "Bash(make **)",
+      "Bash(make)",
+      "Bash(mingw32-make **)",
+      "Bash(g++ **)",
+      "Bash(git **)",
+      "Bash(ls **)",
+      "Bash(which **)",
+      "Bash(pwd)",
+      "Bash(echo **)",
+      "Bash(cat **)",
+      "Bash(head **)",
+      "Bash(tail **)",
+      "Bash(cp **)",
+      "Bash(mkdir **)",
+      "Bash(rm **)",
+      "Bash(./** )",
+      "Bash(CXX=** )",
+      "Bash(cd **)",
+      "Bash(cd **)",
+      "Bash(PATH=** )",
+      "Bash(find **)",
+      "Bash(windeployqt **)"
+    ],
+    "deny": []
+  }
+}
