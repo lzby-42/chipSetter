@@ -362,9 +362,11 @@ void ProcessManager::completeCurrentStep()
         m_currentStepIdx = -1;
         emit currentStepChanged(-1);
 
-        // 收尾完成 → 全部重置为灰色, 下次从头开始
+        // 收尾完成 → 全部重置, 下次从头开始
         for (int i = 0; i < STEP_COUNT; ++i) {
             m_stepStates[i] = PENDING;
+            for (int j = 0; j < m_substepStates[i].size(); ++j)
+                m_substepStates[i][j] = PENDING;
             emit stepStateChanged(i, static_cast<int>(PENDING));
         }
 
@@ -385,9 +387,11 @@ void ProcessManager::completeCurrentStep()
             return;
         }
 
-        // 重置所有循环步骤为待执行 (新循环开始)
+        // 重置所有循环步骤+子步骤为待执行 (新循环开始)
         for (int i = LOOP_START; i <= LOOP_END; ++i) {
             m_stepStates[i] = PENDING;
+            for (int j = 0; j < m_substepStates[i].size(); ++j)
+                m_substepStates[i][j] = PENDING;
             emit stepStateChanged(i, static_cast<int>(PENDING));
         }
 
