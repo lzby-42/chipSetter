@@ -311,11 +311,7 @@ void MainWindow::connectSignals()
             });
 
     // ===== 底部操作栏 =====
-    connect(m_bottomBar, &BottomBarWidget::emergencyStopClicked,
-            this, [this]() {
-                m_alarmLogger->raiseAlarm(ALARM_LEVEL_FATAL, "操作", "操作员触发急停");
-                m_processManager->emergencyStop();
-            });
+    // 启动
     connect(m_bottomBar, &BottomBarWidget::startClicked,
             this, [this]() {
         m_statusBar->setRunStatus(true);
@@ -324,6 +320,7 @@ void MainWindow::connectSignals()
         m_processManager->startCycle();
     });
 
+    // 暂停
     connect(m_bottomBar, &BottomBarWidget::pauseClicked,
             this, [this]() {
         m_statusBar->setRunStatus(false);
@@ -332,6 +329,26 @@ void MainWindow::connectSignals()
         m_processManager->pauseCycle();
     });
 
+    // 急停
+    connect(m_bottomBar, &BottomBarWidget::emergencyStopClicked,
+            this, [this]() {
+                m_alarmLogger->raiseAlarm(ALARM_LEVEL_FATAL, "操作", "操作员触发急停");
+                m_processManager->emergencyStop();
+            });
+
+    // 收尾 — 当前循环跑完后自动进收尾
+    connect(m_bottomBar, &BottomBarWidget::softFinishClicked,
+            this, [this]() {
+                m_processManager->requestFinish();
+            });
+
+    // 立即收尾 — 立刻跳收尾步骤
+    connect(m_bottomBar, &BottomBarWidget::immediateFinishClicked,
+            this, [this]() {
+                m_processManager->finishCycle();
+            });
+
+    // 复位 — 急停 + 清除报警 + 重置统计
     connect(m_bottomBar, &BottomBarWidget::resetClicked,
             this, [this]() {
         m_alarmLogger->clearAll();
@@ -340,30 +357,22 @@ void MainWindow::connectSignals()
         m_processManager->emergencyStop();
     });
 
-    // 模式切换 → 切换生产/调试界面 (操作栏按钮)
+    // 模式切换 (操作栏按钮)
     connect(m_bottomBar, &BottomBarWidget::modeSwitchClicked,
             this, [this]() {
-                if (m_stack->currentIndex() == 0) {
+                if (m_stack->currentIndex() == 0)
                     switchToDebugMode();
-                } else {
+                else
                     switchToProductionMode();
-                }
             });
 
-    // 模式切换 → 状态栏模式灯也可点击切换
+    // 模式切换 (状态栏模式灯)
     connect(m_statusBar, &StatusBarWidget::modeClicked,
             this, [this]() {
-                if (m_stack->currentIndex() == 0) {
+                if (m_stack->currentIndex() == 0)
                     switchToDebugMode();
-                } else {
+                else
                     switchToProductionMode();
-                }
-            });
-
-    // 关机按钮 → 出循环关机: 当前循环跑完后自动进收尾
-    connect(m_bottomBar, &BottomBarWidget::shutdownClicked,
-            this, [this]() {
-                m_processManager->requestFinish();
             });
 
     // 步骤参数编辑 → 更新 ProcessManager

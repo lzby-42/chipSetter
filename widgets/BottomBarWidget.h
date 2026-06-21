@@ -1,6 +1,6 @@
 /**
  * @file BottomBarWidget.h
- * @brief 底部操作栏 — 急停/启动/暂停/复位、模式切换、通讯状态
+ * @brief 底部操作栏 — 启动/暂停/急停/收尾/立即收尾/复位、模式切换、通讯状态
  */
 
 #ifndef BOTTOMBARWIDGET_H
@@ -19,25 +19,27 @@ public:
     ~BottomBarWidget();
 
 public slots:
-    void setConnectionStatus(bool connected);   // 通讯状态
-    void setMode(int mode);                     // 手动/自动
+    void setConnectionStatus(bool connected);
+    void setMode(int mode);
 
 signals:
-    void emergencyStopClicked();
     void startClicked();
     void pauseClicked();
-    void resetClicked();
+    void emergencyStopClicked();
+    void softFinishClicked();          // 收尾: 循环跑完后进收尾
+    void immediateFinishClicked();     // 立即收尾: 立刻跳收尾
+    void resetClicked();              // 复位: 急停+清除报警+重置统计
     void modeSwitchClicked();
-    void shutdownClicked();                     // 关机
 
 private:
     void setupUI();
 
-    QPushButton* m_emergencyBtn;
     QPushButton* m_startBtn;
     QPushButton* m_pauseBtn;
+    QPushButton* m_emergencyBtn;
+    QPushButton* m_softFinishBtn;
+    QPushButton* m_immediateFinishBtn;
     QPushButton* m_resetBtn;
-    QPushButton* m_shutdownBtn;
     QPushButton* m_modeBtn;
     QLabel*      m_connLabel;
 };
