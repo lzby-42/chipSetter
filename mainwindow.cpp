@@ -151,7 +151,7 @@ void MainWindow::connectSignals()
                 m_production->onNewAlarm(level, rec.message);
             });
 
-    connect(m_production, &ProductionWidget::onClearAlarms,
+    connect(m_production, &ProductionWidget::alarmsCleared,
             m_alarmLogger, &AlarmLogger::clearAll);
 
     // 定期更新轴状态到生产界面
@@ -329,7 +329,7 @@ void MainWindow::connectSignals()
         m_alarmLogger->clearAll();
         m_statsCollector->reset();
         m_production->onClearAlarms();
-        m_processManager->finishCycle();
+        m_processManager->emergencyStop();
     });
 
     // 模式切换 → 切换生产/调试界面

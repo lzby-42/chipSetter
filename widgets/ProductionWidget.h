@@ -49,6 +49,7 @@ public slots:
 
 signals:
     void switchToDebugMode();
+    void alarmsCleared();
 
 private:
     void setupUI();

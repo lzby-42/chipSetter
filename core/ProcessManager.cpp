@@ -236,8 +236,8 @@ void ProcessManager::resumeCycle()
     if (m_currentStepIdx >= 0) {
         m_stepTimer->start(500);
     } else {
-        // Was paused at loop boundary — restart from initialization
-        executeStep(STEP_INIT);
+        // Was paused at loop boundary — restart from loop start
+        executeStep(LOOP_START);
     }
     qDebug() << "[ProcessManager] 继续循环";
 }
@@ -373,7 +373,6 @@ void ProcessManager::completeCurrentStep()
 
         if (m_paused) {
             m_currentStepIdx = -1;
-            m_running = false;
             emit currentStepChanged(-1);
             qDebug() << "[ProcessManager] 循环完成, 暂停中...";
             return;

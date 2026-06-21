@@ -147,8 +147,10 @@ void ProductionWidget::setupUI()
         "QPushButton{background:#333;color:#ccc;border:none;"
         "border-radius:3px;font-size:10px;}"
         "QPushButton:hover{background:#444;}");
-    connect(clearAlarmBtn, &QPushButton::clicked,
-            this, &ProductionWidget::onClearAlarms);
+    connect(clearAlarmBtn, &QPushButton::clicked, this, [this]() {
+        onClearAlarms();
+        emit alarmsCleared();
+    });
     rightCol->addWidget(clearAlarmBtn);
 
     bodyRow->addWidget(rightFrame, 1);
