@@ -29,6 +29,7 @@ ProcessManager::ProcessManager(QObject *parent)
     , m_currentStepIdx(-1)
     , m_running(false)
     , m_paused(false)
+    , m_pendingFinish(false)
     , m_cycleCount(0)
     , m_substepProgress(0)
 {
@@ -213,6 +214,7 @@ void ProcessManager::startCycle()
             m_stepStates[i] = PENDING;
         }
         m_cycleCount = 0;
+        m_pendingFinish = false;
         executeStep(STEP_INIT);
     } else {
         // 继续执行当前步骤
@@ -245,9 +247,21 @@ void ProcessManager::resumeCycle()
 void ProcessManager::finishCycle()
 {
     m_paused = false;
+    m_pendingFinish = false;
     // 跳过当前步骤, 直接进入收尾
     executeStep(STEP_FINISH);
-    qDebug() << "[ProcessManager] 开始收尾";
+    qDebug() << "[ProcessManager] 立刻收尾";
+}
+
+void ProcessManager::requestFinish()
+{
+    m_pendingFinish = true;
+    qDebug() << "[ProcessManager] 出循环关机 — 当前循环完成后进入收尾";
+}
+
+bool ProcessManager::isPendingFinish() const
+{
+    return m_pendingFinish;
 }
 
 void ProcessManager::emergencyStop()
@@ -384,6 +398,14 @@ void ProcessManager::completeCurrentStep()
             m_currentStepIdx = -1;
             emit currentStepChanged(-1);
             qDebug() << "[ProcessManager] 循环完成, 暂停中...";
+            return;
+        }
+
+        // 出循环关机 → 进收尾
+        if (m_pendingFinish) {
+            m_pendingFinish = false;
+            executeStep(STEP_FINISH);
+            qDebug() << "[ProcessManager] 出循环关机 → 进入收尾";
             return;
         }
 

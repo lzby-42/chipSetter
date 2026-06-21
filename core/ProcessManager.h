@@ -64,8 +64,11 @@ public slots:
     void startCycle();                // 开始: 从初始化(0)开始
     void pauseCycle();                // 暂停: 完成当前步骤后停
     void resumeCycle();               // 继续: 继续自动循环
-    void finishCycle();               // 收尾: 跳至步骤8, 完成后停止
+    void finishCycle();               // 立刻收尾: 跳至步骤8, 完成后停止
+    void requestFinish();             // 出循环关机: 循环跑完后进收尾
     void emergencyStop();             // 急停: 全部重置为待执行
+
+    bool isPendingFinish() const;     // 是否已标记出循环关机
 
 signals:
     void stepStateChanged(int stepIndex, int state);
@@ -94,6 +97,7 @@ private:
     int     m_currentStepIdx;         // -1=无, 0~8
     bool    m_running;
     bool    m_paused;
+    bool    m_pendingFinish;          // 出循环关机标志
     int     m_cycleCount;
     int     m_substepProgress;        // 当前子步骤进度 (模拟用)
     QTimer* m_stepTimer;

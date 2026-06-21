@@ -360,14 +360,10 @@ void MainWindow::connectSignals()
                 }
             });
 
-    // 关机按钮 → 暂停 + 进入收尾流程
+    // 关机按钮 → 出循环关机: 当前循环跑完后自动进收尾
     connect(m_bottomBar, &BottomBarWidget::shutdownClicked,
             this, [this]() {
-                m_statusBar->setRunStatus(false);
-                m_production->setRunStatus(false);
-                m_statsCollector->pause();
-                m_processManager->pauseCycle();
-                m_processManager->finishCycle();
+                m_processManager->requestFinish();
             });
 
     // 步骤参数编辑 → 更新 ProcessManager
