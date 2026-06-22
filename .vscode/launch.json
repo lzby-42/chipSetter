@@ -1,0 +1,84 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "远程调试 (GNC工控机)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/debug/chipSetter.exe",
+            "cwd": "${workspaceFolder}",
+            "miDebuggerServerAddress": "192.168.1.2:1234",
+            "miDebuggerPath": "D:/Code_Languages/C/msys64/mingw32/bin/gdb.exe",
+            "MIMode": "gdb",
+            "stopAtEntry": false,
+            "externalConsole": false,
+            "setupCommands": [
+                {
+                    "description": "阻止从远程下载文件 (避免 gdb 16.x 栈溢出崩溃)",
+                    "text": "set sysroot",
+                    "ignoreFailures": false
+                },
+                {
+                    "description": "启用 gdb 美化打印",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "设置反汇编风格为 Intel",
+                    "text": "-gdb-set disassembly-flavor intel",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "关闭共享库自动加载 (防止远程读取 DLL)",
+                    "text": "set auto-solib-add off",
+                    "ignoreFailures": true
+                }
+            ],
+            "preLaunchTask": "编译并部署 Debug 到目标机",
+            "postDebugTask": "远端结束 gdbserver",
+            "logging": {
+                "engineLogging": true,
+                "trace": true,
+                "traceResponse": true
+            }
+        },
+        {
+            "name": "远程调试 (仅连接,不编译)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/debug/chipSetter.exe",
+            "cwd": "${workspaceFolder}",
+            "miDebuggerServerAddress": "192.168.1.2:1234",
+            "miDebuggerPath": "D:/Code_Languages/C/msys64/mingw32/bin/gdb.exe",
+            "MIMode": "gdb",
+            "stopAtEntry": false,
+            "externalConsole": false,
+            "preLaunchTask": "远端启动 gdbserver",
+            "postDebugTask": "远端结束 gdbserver",
+            "setupCommands": [
+                {
+                    "description": "阻止从远程下载文件 (避免 gdb 16.x 栈溢出崩溃)",
+                    "text": "set sysroot",
+                    "ignoreFailures": false
+                },
+                {
+                    "description": "关闭共享库自动加载 (防止远程读取 DLL)",
+                    "text": "set auto-solib-add off",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
+            "name": "本地调试 (GDB)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/debug/chipSetter.exe",
+            "cwd": "${workspaceFolder}",
+            "miDebuggerPath": "D:/Code_Languages/C/msys64/mingw32/bin/gdb.exe",
+            "MIMode": "gdb",
+            "stopAtEntry": false,
+            "externalConsole": false,
+            "preLaunchTask": "编译 Debug 版本"
+        }
+    ]
+}

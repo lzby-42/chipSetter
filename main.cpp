@@ -62,7 +62,7 @@ int main(int argc, char *argv[])
 
     MainWindow mainWindow;
     mainWindow.setWindowTitle("固晶机控制系统 V1.0");
-    mainWindow.resize(1024, 768);
+    mainWindow.resize(1024, 765);
     mainWindow.setMinimumSize(1024, 680);
     mainWindow.show();
 
