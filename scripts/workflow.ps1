@@ -73,13 +73,17 @@ function Invoke-Build {
         "make -f Makefile.Debug -j4 2>&1"
     ) -join " && "
 
+    $oldMSYSTEM = $env:MSYSTEM
+    $oldQT_PATH = $env:QT_PATH
+    $env:MSYSTEM = "MINGW32"
+    $env:QT_PATH = $QtPath
+
     $proc = Start-Process -FilePath $BashExe `
         -ArgumentList "-lc", $buildCmd `
-        -NoNewWindow -Wait -PassThru `
-        -Environment @{
-            MSYSTEM = "MINGW32"
-            QT_PATH = $QtPath
-        }
+        -NoNewWindow -Wait -PassThru
+
+    $env:MSYSTEM = $oldMSYSTEM
+    $env:QT_PATH = $oldQT_PATH
 
     if ($proc.ExitCode -ne 0) {
         Write-Err "Build failed (exit=$($proc.ExitCode))"
