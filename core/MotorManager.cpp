@@ -123,6 +123,15 @@ void MotorManager::homeRequest(int axisId)
 {
     if (axisId < 1 || axisId > AXIS_COUNT) return;
 
+    // 确保轴已使能 (标准回零API要求)
+    if (!m_axes[axisId - 1].isEnabled) {
+        if (!enableAxis(axisId)) {
+            qWarning() << "MotorManager: 轴" << axisId << "使能失败, 无法回零";
+            emit homeFinished(axisId, false, -1);
+            return;
+        }
+    }
+
     TStandardHomePrm prm;
     memset(&prm, 0, sizeof(prm));
     prm.mode         = 10;      // HOME_MODE_LIMIT: 限位回零 (通过限位开关触发)

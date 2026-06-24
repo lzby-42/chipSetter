@@ -59,7 +59,7 @@ try {
 @echo off
 set "PATH=$dir;%PATH%"
 cd /d "$dir"
-start "" chipSetter.exe
+start "chipSetter" chipSetter.exe
 "@ | Out-File -Encoding ASCII -FilePath $batch
 
         Write-Host "Batch: $batch"
