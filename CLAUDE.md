@@ -283,6 +283,107 @@ StatusBar 模式切换
 **部署**: robocopy via SMB `\\192.168.1.2\share` → GNC 本地 `C:\Users\googol\Desktop\share\chipSetter\`
 **远程管理**: WinRM (5985-5986) + schtasks /it (投递交互会话, 解决 Session 0 无 GUI)
 
+---
+
+### .vscode 工具链全景 (6个文件)
+
+#### 文件清单
+
+| 文件 | 职责 |
+|------|------|
+| `launch.json` | 3 种调试启动配置 (远程F5/远程仅连接/本地) |
+| `tasks.json` | 8 个 Task, 含复合链路 `编译并部署 Debug 到目标机` |
+| `package_debug.ps1` | windeployqt + googol/gts.dll + gdbserver + MinGW DLL → `debug_deploy/` |
+| `deploy_to_target.ps1` | net use SMB 预建连接 → robocopy /E → GNC `\\192.168.1.2\share\chipSetter` |
+| `start_gdbserver.ps1` | WinRM → PsExec → 手动 三级降级, 远端启动 gdbserver `--once 0.0.0.0:1234` |
+| `stop_gdbserver.ps1` | WinRM 远端杀 chipSetter + gdbserver 进程, 删除计划任务 |
+
+#### launch.json: 3 种调试配置
+
+| 配置名 | 用途 | preLaunchTask | postDebugTask |
+|--------|------|---------------|---------------|
+| **远程调试 (GNC工控机)** | F5 一键: 编译→打包→部署→启动gdbserver→连接 | `编译并部署 Debug 到目标机` | `远端结束 gdbserver` |
+| **远程调试 (仅连接,不编译)** | 仅连已有 gdbserver, 跳过编译部署 | `远端启动 gdbserver` | `远端结束 gdbserver` |
+| **本地调试 (GDB)** | Mock 模式本地调试, 无硬件 | `编译 Debug 版本` | 无 |
+
+**gdb setupCommands (防踩坑):**
+- `set sysroot` — 清空 sysroot, 阻止 GDB 16.2 从远程读 exe 导致栈溢出
+- `set auto-solib-add off` — 禁止自动加载远程 DLL
+
+#### tasks.json: Task 依赖链
+
+```
+编译并部署 Debug 到目标机 (复合入口)
+  ├── ① 远端结束 gdbserver    → stop_gdbserver.ps1 (WinRM)
+  ├── ② 编译 Debug 版本
+  │       └── make Debug (MSYS2)  → bash -lc "make -f Makefile.Debug -j4"
+  │            (env: MSYSTEM=MINGW32  ← 关键! 写在env块不是命令里)
+  ├── ③ 打包 Debug 部署包       → package_debug.ps1
+  ├── ④ 部署到目标机            → deploy_to_target.ps1
+  └── ⑤ 远端启动 gdbserver     → start_gdbserver.ps1
+```
+
+**独立 Task:**
+
+| Task 名 | 类型 | 说明 |
+|---------|------|------|
+| `qmake Debug` | qmake | Mock 模式 qmake (无 `CONFIG+=real_gnc`) |
+| `make Debug (MSYS2)` | bash | 增量编译, env 中设 `MSYSTEM=MINGW32` |
+| `编译 Debug 版本` | 复合 | 仅编译 (依赖 `make Debug (MSYS2)`) |
+| `打包 Debug 部署包` | powershell | package_debug.ps1 |
+| `部署到目标机` | powershell | deploy_to_target.ps1 |
+| `远端结束 gdbserver` | powershell | stop_gdbserver.ps1 |
+| `远端启动 gdbserver` | powershell | start_gdbserver.ps1 |
+
+**注意**: Task `qmake Debug` 编译的是 Mock 模式。如需 Real GNC 模式, 需手动运行 `qmake CONFIG+=real_gnc` 或用 `scripts/build_deploy.bat`。
+
+#### package_debug.ps1: 打包流程
+
+```
+① 检查 debug/chipSetter.exe 存在
+② 清空并重建 debug_deploy/
+③ 复制 debug/chipSetter.exe
+④ windeployqt --no-translations --no-compiler-runtime (Qt DLL)
+⑤ 复制 gdbserver.exe + libgcc_s_dw2-1.dll + libstdc++-6.dll + libwinpthread-1.dll
+⑥ 复制 googol/ (gts.dll, gts.lib, gt_rn.dll, config.h, core1_20261212.cfg)
+⑦ 复制 Qt plugins/ (platforms/qwindows.dll 等)
+输出: debug_deploy/ (约 90 文件, 118MB)
+```
+
+#### deploy_to_target.ps1: 部署机制
+
+```
+① 从 ~\.chipsetter_cred.xml 读取加密凭证
+② net use \\192.168.1.2\share /user:googol <password> (预建 SMB, 解决 1326 错误)
+③ robocopy debug_deploy/ → \\192.168.1.2\share\chipSetter /E /R:3 /W:5
+```
+
+- 目标路径: `C:\Users\googol\Desktop\share\chipSetter\` (GNC 本地)
+- robocopy 返回值: 0-7 正常, ≥8 失败
+
+#### start_gdbserver.ps1: 三级降级启动
+
+```
+Method 1 (WinRM): New-PSSession → Invoke-Command 远端创建 .bat → schtasks /create /it 投递交互会话
+Method 2 (PsExec): PsExec \\192.168.1.2 -s -d cmd /c "gdbserver.exe --once 0.0.0.0:1234 chipSetter.exe"
+Method 3 (手动):   打印说明让用户 RDP 到 GNC 手动运行
+```
+
+**关键参数**: `gdbserver.exe --once 0.0.0.0:1234 chipSetter.exe`
+- `--once`: gdb 断开后自动退出 (配合 postDebugTask 清理)
+- `0.0.0.0:1234`: 必须绑定 IPv4 全地址, `:1234` 只绑 IPv6
+
+#### stop_gdbserver.ps1: 远端清理
+
+```
+WinRM → Invoke-Command:
+  Stop-Process chipSetter -Force
+  Stop-Process gdbserver -Force
+  schtasks /delete /tn "chipSetter-gdbserver" /f
+```
+
+---
+
 #### F5 一键调试链路
 
 ```
@@ -309,19 +410,21 @@ StatusBar 模式切换
 
 | 场景 | 操作 |
 |------|------|
-| 改代码调试 | 直接 F5 (增量编译自动部署) |
+| 改代码调试 | 直接 F5 (增量编译自动部署, 默认 Mock 模式) |
 | 新增 .cpp/.h | Ctrl+Shift+P → `qmake Debug` → F5 |
 | 改 .pro | Ctrl+Shift+P → `qmake Debug` → F5 |
 | GNC 端 | 需保持登录 (RDP/本地), 否则 schtasks /it 无交互会话可投递 |
+| 实机测试 (非调试) | `scripts/build_deploy.bat` → `powershell -File .vscode/package_debug.ps1` → `powershell -File .vscode/deploy_to_target.ps1` |
+| 仅部署 (不编译) | 直接跑 `package_debug.ps1` + `deploy_to_target.ps1` |
 
 #### 脚本速查
 
-| 脚本 | 用途 |
-|------|------|
-| `.vscode/package_debug.ps1` | windeployqt + googol/ + MinGW DLL → debug_deploy |
-| `.vscode/deploy_to_target.ps1` | net use SMB → robocopy /E → GNC |
-| `.vscode/start_gdbserver.ps1` | WinRM → schtasks /it 远端启动 gdbserver |
-| `.vscode/stop_gdbserver.ps1` | WinRM 远端杀 gdbserver + chipSetter |
+| 脚本 | 用途 | 关键参数 |
+|------|------|----------|
+| `.vscode/package_debug.ps1` | windeployqt + googol/ + MinGW DLL → debug_deploy | 无参数, 全自动 |
+| `.vscode/deploy_to_target.ps1` | net use SMB → robocopy /E → GNC | `-TargetShare` 默认 `\\192.168.1.2\share\chipSetter` |
+| `.vscode/start_gdbserver.ps1` | WinRM → PsExec → 手动 三级降级 | `-TargetIp -Port -RemoteExePath` |
+| `.vscode/stop_gdbserver.ps1` | WinRM 远端杀 gdbserver + chipSetter | 需要凭证文件 |
 
 凭证: `~\.chipsetter_cred.xml` (Export-Clixml 加密, 仅本机本用户可解密)
 GNC 用户: `googol`, 需在 `Remote Management Users` 组
