@@ -18,6 +18,8 @@ SOURCES += \
     core/AlarmLogger.cpp \
     core/StatsCollector.cpp \
     core/ProcessManager.cpp \
+    core/DispensingPlatformController.cpp \
+    core/PickupPlatformController.cpp \
     widgets/StatusBarWidget.cpp \
     widgets/MotorPtpWidget.cpp \
     widgets/MotorParamWidget.cpp \
@@ -43,6 +45,8 @@ HEADERS += \
     core/AlarmLogger.h \
     core/StatsCollector.h \
     core/ProcessManager.h \
+    core/DispensingPlatformController.h \
+    core/PickupPlatformController.h \
     widgets/StatusBarWidget.h \
     widgets/MotorPtpWidget.h \
     widgets/MotorParamWidget.h \
