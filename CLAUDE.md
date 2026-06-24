@@ -452,3 +452,21 @@ WinRM → Invoke-Command:
 凭证: `~\.chipsetter_cred.xml` (Export-Clixml 加密, 仅本机本用户可解密)
 GNC 用户: `googol`, 需在 `Remote Management Users` 组
 防火墙: TCP 1234 + 5985-5986 已放行
+
+#### Session 0 陷阱
+
+**问题**: `schtasks /create /it` + `schtasks /run` 会把进程丢到 Session 0（无 GUI），即使有用户登录。
+
+**根因**: `schtasks /run` 忽略 `/it` 标志，直接在非交互会话中执行。
+
+**修复**: 不用 `/run`，调度时间设 5 秒后，等调度器自然触发。调度器会尊重 `/it` 并将进程放入用户会话 (Session 1+)。
+
+```powershell
+# 错误: schtasks /run → Session 0, 无 GUI
+schtasks /create /tn "task" /tr "..." /sc once /st $time /it /f
+schtasks /run /tn "task"   # ← 这行破坏了 /it
+
+# 正确: 等调度器触发 → Session 1, 有 GUI
+schtasks /create /tn "task" /tr "..." /sc once /st $time /it /f
+Start-Sleep -Seconds 10    # 等调度器在用户会话中执行
+```
