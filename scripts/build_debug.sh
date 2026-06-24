@@ -1,17 +1,12 @@
 #!/bin/bash
 # ============================================================
-# chipSetter 项目 — Debug 编译脚本 (MSYS2 MINGW32)
+# chipSetter — Debug 编译 (MSYS2 MINGW32)
 #
-# 用法:
-#   在 MSYS2 MINGW32 终端中直接运行:
-#     ./scripts/build_debug.sh
+# 用法:  ./scripts/build_debug.sh [clean]
 #
-#   或在 Windows 中运行 PowerShell 包装脚本:
-#     powershell -File scripts/build_debug.ps1
-#
-# 环境要求:
-#   - Qt 5.15.2 MinGW 32-bit (默认路径: D:/tool/qt/5.15.2/mingw81_32)
-#   - MSYS2 with MINGW32 toolchain (默认路径: D:/Code_Languages/C/msys64)
+# 环境:
+#   - Qt 5.15.2 MinGW 32-bit (D:/tool/qt/5.15.2/mingw81_32)
+#   - MSYS2 MINGW32 (D:/Code_Languages/C/msys64)
 # ============================================================
 set -e
 

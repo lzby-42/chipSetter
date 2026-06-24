@@ -5,10 +5,10 @@
  * 职责:
  *   - 管理13个轴的 MotorAxis 状态
  *   - 接收UI的运动请求 (moveRequest, homeRequest, jogRequest)
- *   - 通过 IGncController 发送运动指令
+ *   - 通过 GncController 发送运动指令
  *   - 定时轮询位置和状态, 通过信号通知UI
  *
- * 依赖: IGncController (注入), HardwareConfig.h, MotorAxis.h
+ * 依赖: GncController (注入), HardwareConfig.h, MotorAxis.h
  */
 
 #ifndef MOTORMANAGER_H
@@ -26,7 +26,7 @@ class MotorManager : public QObject
     Q_OBJECT
 
 public:
-    explicit MotorManager(IGncController* controller, QObject *parent = nullptr);
+    explicit MotorManager(GncController* controller, QObject *parent = nullptr);
     ~MotorManager();
 
     // ---- 初始化 ----
@@ -74,7 +74,7 @@ private:
     double mmToPulse(int axisId, double mm) const;  // mm → pulse 换算
     double pulseToMm(int axisId, double pulse) const;
 
-    IGncController*      m_controller;          // GNC接口 (注入, 不拥有)
+    GncController*      m_controller;          // GNC接口 (注入, 不拥有)
     QVector<MotorAxis>   m_axes;                // 13轴状态 (0-based)
     QTimer*              m_pollTimer;           // 轮询定时器
     bool                 m_polling;

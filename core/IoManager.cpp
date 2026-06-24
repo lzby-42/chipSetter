@@ -6,7 +6,7 @@
 #include "IoManager.h"
 #include <QDebug>
 
-IoManager::IoManager(IGncController* controller, QObject *parent)
+IoManager::IoManager(GncController* controller, QObject *parent)
     : QObject(parent)
     , m_controller(controller)
 {

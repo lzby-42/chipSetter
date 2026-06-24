@@ -44,7 +44,7 @@ public slots:
                           const QVector<int>& alarmedAxes);
 
     // Alarms (backward compatible)
-    void onNewAlarm(const QString& level, const QString& msg);
+    void onNewAlarm(const QString& level, const QString& source, const QString& msg);
     void onClearAlarms();
 
 signals:

@@ -1,6 +1,6 @@
 debug/main.o
 debug/mainwindow.o
-debug/GncControllerImpl.o
+debug/GncController.o
 debug/MotorManager.o
 debug/IoManager.o
 debug/AlarmLogger.o
@@ -22,7 +22,6 @@ debug/DeviceStatusWidget.o
 debug/qrc_resources.o
 debug/moc_mainwindow.o
 debug/moc_GncController.o
-debug/moc_GncControllerImpl.o
 debug/moc_MotorManager.o
 debug/moc_IoManager.o
 debug/moc_AlarmLogger.o

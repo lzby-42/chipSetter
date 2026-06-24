@@ -5,16 +5,14 @@
 #   powershell -File scripts/workflow.ps1 <command> [options]
 #
 # Commands:
-#   build       Mock mode build
-#   build-real  Real GNC mode build
-#   package     Package (windeployqt + DLL -> debug_deploy)
-#   deploy      Deploy to GNC (robocopy)
-#   start       Remote start (gdbserver + chipSetter)
-#   stop        Remote stop (kill process + delete scheduled task)
-#   test        Real-machine test: build-real -> package -> deploy -> start
-#   debug       F5 debug: same as test
-#   quick       Quick deploy: skip build, package -> deploy -> start
-#   full        Full flow: build -> package (Mock, no deploy)
+#   build      Build (GTS SDK)
+#   package    Package (windeployqt + DLL -> debug_deploy)
+#   deploy     Deploy to GNC (robocopy)
+#   start      Remote start direct (no gdbserver, for testing)
+#   stop       Remote stop (kill process + delete scheduled task)
+#   test       Real-machine test: build -> package -> deploy -> start
+#   debug      F5 debug: build -> package -> deploy -> start (gdbserver)
+#   quick      Quick deploy: skip build, package -> deploy -> start
 #
 # Options:
 #   -SkipBuild     Skip build step (for test/debug)
@@ -24,7 +22,7 @@
 # ============================================================
 param(
     [Parameter(Position=0)]
-    [ValidateSet("build","build-real","package","deploy","start","stop","test","debug","quick","full")]
+    [ValidateSet("build","package","deploy","start","stop","test","debug","quick")]
     [string]$Command = "test",
 
     [switch]$SkipBuild,
@@ -59,8 +57,7 @@ function Write-Warn($msg) { Write-Host "  [WARN] $msg" -ForegroundColor Yellow }
 # ============================================================
 function Invoke-Build {
     param([bool]$RealGnc = $false)
-    $mode = if ($RealGnc) { "Real GNC" } else { "Mock" }
-    Write-Step "Building ($mode mode)..."
+    Write-Step "Building (GTS SDK)..."
 
     $qmakeArgs = "chipSetter.pro", "CONFIG+=debug", "CONFIG+=console"
     if ($RealGnc) { $qmakeArgs += "CONFIG+=real_gnc" }
@@ -206,10 +203,6 @@ $totalStart = Get-Date
 switch ($Command) {
 
     "build" {
-        Invoke-Build -RealGnc $false
-    }
-
-    "build-real" {
         Invoke-Build -RealGnc $true
     }
 
@@ -251,12 +244,6 @@ switch ($Command) {
         Invoke-Package
         if (-not $SkipDeploy) { Invoke-Deploy }
         Invoke-StartDirect
-    }
-
-    "full" {
-        if (-not $SkipBuild) { Invoke-Build -RealGnc $false }
-        Invoke-Package
-        Write-OK "Mock full flow complete (no deploy)"
     }
 
     default {

@@ -1,11 +1,8 @@
 /**
  * @file AlarmListWidget.h
- * @brief 报警列表面板 — 实时报警滚动列表
+ * @brief 报警列表 — 紧凑表格 (时间|级别|来源|消息)
  *
- * 职责:
- *   - 显示活跃报警 (红色=致命, 橙色=警告, 灰色=已恢复)
- *   - 可滚动查看历史
- *   - 显示报警总数
+ * 级别颜色: 致命=红, 警告=橙, 信息=灰, 已恢复=整行灰
  */
 
 #ifndef ALARMLISTWIDGET_H
@@ -13,9 +10,7 @@
 
 #include <QWidget>
 #include <QLabel>
-#include <QVBoxLayout>
-#include <QFrame>
-#include <QVector>
+#include <QTableWidget>
 #include "models/AlarmRecord.h"
 
 class AlarmListWidget : public QWidget
@@ -35,10 +30,8 @@ private:
     void setupUI();
     void updateCountBadge();
 
-    QWidget*        m_alarmContainer;
-    QVBoxLayout*    m_alarmLayout;
+    QTableWidget*   m_table;
     QLabel*         m_countLabel;
-    QVector<QFrame*> m_alarmFrames;
     int             m_activeCount;
 };
 

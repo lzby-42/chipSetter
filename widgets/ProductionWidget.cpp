@@ -225,7 +225,7 @@ void ProductionWidget::updateAxisStates(const QVector<int>& enabledAxes,
     m_deviceStatus->updateAxisStates(enabledAxes, movingAxes, alarmedAxes);
 }
 
-void ProductionWidget::onNewAlarm(const QString& level, const QString& msg)
+void ProductionWidget::onNewAlarm(const QString& level, const QString& source, const QString& msg)
 {
     m_alarmCount++;
     m_alarmBadge->setText(QString::number(m_alarmCount));
@@ -236,11 +236,27 @@ void ProductionWidget::onNewAlarm(const QString& level, const QString& msg)
     QStringList lines = m_alarmList->text().split('\n', Qt::SkipEmptyParts);
     if (lines.size() == 1 && lines[0] == "暂无报警") lines.clear();
 
-    QString icon = (level == "FATAL") ? "⚠" : "?";
-    lines.prepend(QString("%1 %2").arg(icon, msg));
+    // 级别标签 + 颜色
+    QString tag;
+    QString tagColor;
+    if (level == "FATAL") {
+        tag = QString::fromUtf8("[致命]");
+        tagColor = "#f44336";
+    } else if (level == "WARN") {
+        tag = QString::fromUtf8("[警告]");
+        tagColor = "#ff9800";
+    } else {
+        tag = QString::fromUtf8("[信息]");
+        tagColor = "#78909c";
+    }
+
+    QString line = QString("<span style='color:%1;'>%2</span> <span style='color:#ccc;'>[%3] %4</span>")
+                       .arg(tagColor, tag, source, msg);
+    lines.prepend(line);
     if (lines.size() > 8) lines = lines.mid(0, 8);
 
-    m_alarmList->setText(lines.join('\n'));
+    m_alarmList->setText(lines.join("<br>"));
+    m_alarmList->setTextFormat(Qt::RichText);
 }
 
 void ProductionWidget::onClearAlarms()
@@ -250,5 +266,6 @@ void ProductionWidget::onClearAlarms()
     m_alarmBadge->setStyleSheet(
         "background:#37474f; color:#90a4ae; padding:2px 10px;"
         "border-radius:10px; font-size:12px; font-weight:bold;");
+    m_alarmList->setTextFormat(Qt::PlainText);
     m_alarmList->setText("暂无报警");
 }

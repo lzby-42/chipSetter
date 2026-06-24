@@ -45,12 +45,14 @@ chipSetter/
 │
 ├── core/                         # Core 层 — 业务逻辑
 │   ├── HardwareConfig.h          # 轴ID/IO宏/默认参数 (集中修改点)
-│   ├── GncController.h/.cpp      # GNC SDK 封装 (MockGncController)
+│   ├── GncController.h/.cpp      # GTS SDK 封装 (GT_Open/GT_GetDi/GT_SetDoBit...)
 │   ├── MotorManager.h/.cpp       # 13轴状态管理, 运动协调
 │   ├── IoManager.h/.cpp          # DI/DO 轮询, 变化检测
 │   ├── AlarmLogger.h/.cpp        # 报警触发/恢复, 历史记录
 │   ├── StatsCollector.h/.cpp     # 产量/时长/节拍统计
-│   └── ProcessManager.h/.cpp     # 9步工艺状态机, 自动循环
+│   ├── ProcessManager.h/.cpp     # 9步工艺状态机, 自动循环
+│   ├── DispensingPlatformController.h/.cpp  # 点胶平台 (轴2+3)
+│   └── PickupPlatformController.h/.cpp      # 取晶平台 (轴10+11)
 │
 ├── models/                       # 数据模型 — 纯结构
 │   ├── MotorAxis.h               # 轴状态
@@ -85,7 +87,8 @@ chipSetter/
 ├── scripts/                      # 编译脚本
 │   ├── build_debug.bat           # 一键编译 (双击运行)
 │   ├── build_debug.ps1           # PowerShell 包装
-│   └── build_debug.sh            # MSYS2 Bash 脚本
+│   ├── build_debug.sh            # MSYS2 Bash 脚本
+│   └── workflow.ps1              # 统一调度 (编译→打包→部署→启动)
 │
 └── docs/                         # 设计文档
     └── superpowers/
@@ -126,12 +129,12 @@ chipSetter/
 
 - Qt 5.15.2 MinGW 32-bit (`D:/tool/qt/5.15.2/mingw81_32`)
 - MSYS2 with MINGW32 工具链 (`D:/Code_Languages/C/msys64`)
-- Windows 10/11
+- 固高 GTS SDK (`googol/` 目录)
 
-### 一键编译
+### 编译
 
 ```bash
-# 方式1: 双击运行 (Windows 资源管理器)
+# 方式1: 双击运行
 scripts/build_debug.bat
 
 # 方式2: PowerShell
@@ -145,17 +148,6 @@ scripts/build_debug.bat clean
 ```
 
 编译成功后输出 `debug/chipSetter.exe`。
-
-### 手动编译
-
-```bash
-# 在 MSYS2 MINGW32 终端中:
-export MSYSTEM=MINGW32
-export PATH="/d/tool/qt/5.15.2/mingw81_32/bin:/mingw32/bin:$PATH"
-cd chipSetter
-qmake chipSetter.pro CONFIG+=debug CONFIG+=console
-make -f Makefile.Debug -j4
-```
 
 ### 构建并运行测试
 

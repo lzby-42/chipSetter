@@ -1,19 +1,16 @@
 /**
  * @file AlarmListWidget.cpp
- * @brief 报警列表面板 — 每条独立显示/自动折行/彩色级别标志
+ * @brief 报警列表 — 紧凑表格实现
  */
 
 #include "AlarmListWidget.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
-#include <QFrame>
-#include <QScrollArea>
-#include <QPushButton>
-#include <QVariant>
+#include <QHeaderView>
 
 AlarmListWidget::AlarmListWidget(QWidget *parent)
     : QWidget(parent)
-    , m_alarmContainer(nullptr)
+    , m_table(nullptr)
     , m_activeCount(0)
 {
     setupUI();
@@ -26,15 +23,15 @@ void AlarmListWidget::setupUI()
     setObjectName("AlarmListWidget");
 
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(4, 4, 4, 4);
-    mainLayout->setSpacing(4);
+    mainLayout->setContentsMargins(2, 2, 2, 2);
+    mainLayout->setSpacing(2);
 
     // ---- 标题行 ----
     QHBoxLayout* titleRow = new QHBoxLayout();
     titleRow->setSpacing(6);
 
     QLabel* title = new QLabel("报警列表", this);
-    title->setStyleSheet("font-weight:bold; color:#ef5350; font-size:12px;");
+    title->setStyleSheet("font-weight:bold; color:#ef5350; font-size:11px;");
     titleRow->addWidget(title);
 
     m_countLabel = new QLabel("0", this);
@@ -47,108 +44,85 @@ void AlarmListWidget::setupUI()
     titleRow->addStretch();
     mainLayout->addLayout(titleRow);
 
-    // ---- 报警滚动区 ----
-    QScrollArea* scroll = new QScrollArea(this);
-    scroll->setWidgetResizable(true);
-    scroll->setStyleSheet(
-        "QScrollArea { background:#1e1e30; border:1px solid #333; border-radius:3px; }");
-    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    // ---- 表格 ----
+    m_table = new QTableWidget(0, 4, this);
+    m_table->setObjectName("AlarmTable");
+    m_table->setHorizontalHeaderLabels({"时间", "级别", "来源", "消息"});
+    m_table->setColumnWidth(0, 60);   // 时间
+    m_table->setColumnWidth(1, 36);   // 级别
+    m_table->setColumnWidth(2, 70);   // 来源
 
-    m_alarmContainer = new QWidget();
-    m_alarmContainer->setStyleSheet("background:#1e1e30;");
-    m_alarmLayout = new QVBoxLayout(m_alarmContainer);
-    m_alarmLayout->setContentsMargins(2, 2, 2, 2);
-    m_alarmLayout->setSpacing(1);
-    m_alarmLayout->addStretch();
+    // 表头样式
+    m_table->horizontalHeader()->setStretchLastSection(true);
+    m_table->horizontalHeader()->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    m_table->horizontalHeader()->setStyleSheet(
+        "QHeaderView::section { background:#2a2a3a; color:#78909c; "
+        "border:none; border-bottom:1px solid #333; padding:2px 4px; font-size:8px; }");
+    m_table->verticalHeader()->setVisible(false);
+    m_table->setSelectionMode(QAbstractItemView::NoSelection);
+    m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    m_table->setShowGrid(false);
+    m_table->setFocusPolicy(Qt::NoFocus);
+    m_table->setStyleSheet(
+        "QTableWidget { background:#1a1a2e; border:1px solid #333; border-radius:2px; "
+        "gridline-color:#222; font-size:9px; }"
+        "QTableWidget::item { padding:0 3px; color:#ccc; }");
 
-    scroll->setWidget(m_alarmContainer);
-    mainLayout->addWidget(scroll, 1);
+    mainLayout->addWidget(m_table, 1);
 }
 
 void AlarmListWidget::onNewAlarm(AlarmRecord record)
 {
     QString timeStr = record.timestamp.toString("hh:mm:ss");
 
-    // 级别标志: 彩色圆点 + 文字
-    QString badge;
-    QString badgeColor;
-    QString borderColor;
-
-    if (record.resolved) {
-        badge = "已恢复";
-        badgeColor = "#78909c";
-        borderColor = "#444";
-    } else if (record.level == ALARM_LEVEL_FATAL) {
-        badge = "致命";
-        badgeColor = "#fff";
-        borderColor = "#f44336";
+    // 级别文字和颜色
+    QString levelText;
+    QString levelColor;
+    if (record.level == ALARM_LEVEL_FATAL) {
+        levelText = "致命";    // 致命
+        levelColor = "#f44336";
     } else if (record.level == ALARM_LEVEL_WARNING) {
-        badge = "警告";
-        badgeColor = "#fff";
-        borderColor = "#ff9800";
+        levelText = "警告";    // 警告
+        levelColor = "#ff9800";
     } else {
-        badge = "信息";
-        badgeColor = "#fff";
-        borderColor = "#607d8b";
+        levelText = "信息";    // 信息
+        levelColor = "#78909c";
     }
 
-    // 颜色点
-    QString dotColor;
-    if (record.resolved)        dotColor = "#78909c";
-    else if (record.level == ALARM_LEVEL_FATAL)  dotColor = "#f44336";
-    else if (record.level == ALARM_LEVEL_WARNING) dotColor = "#ff9800";
-    else                        dotColor = "#607d8b";
+    // 已恢复的整行灰色
+    QString rowColor = record.resolved ? "#666" : levelColor;
 
-    // 每条报警一个 Frame
-    QFrame* frame = new QFrame(m_alarmContainer);
-    frame->setStyleSheet(
-        QString("QFrame { background:#1a1a2e; border-left:3px solid %1; "
-                "border-radius:2px; margin:0px; }").arg(borderColor));
-    frame->setProperty("alarmId", QVariant(record.id));
-    frame->setProperty("resolved", QVariant(record.resolved));
+    // 插入到第 0 行 (最新在上)
+    m_table->insertRow(0);
 
-    QVBoxLayout* frameLayout = new QVBoxLayout(frame);
-    frameLayout->setContentsMargins(4, 3, 4, 3);
-    frameLayout->setSpacing(1);
+    QTableWidgetItem* timeItem  = new QTableWidgetItem(timeStr);
+    QTableWidgetItem* levelItem = new QTableWidgetItem(levelText);
+    QTableWidgetItem* srcItem   = new QTableWidgetItem(record.source);
+    QTableWidgetItem* msgItem   = new QTableWidgetItem(record.message);
 
-    // 第一行: ● 级别标志 + 时间
-    QHBoxLayout* headerRow = new QHBoxLayout();
-    headerRow->setSpacing(6);
+    // 存储 alarmId 用于后续恢复查找
+    timeItem->setData(Qt::UserRole, record.id);
+    timeItem->setData(Qt::UserRole + 1, record.resolved);
 
-    QLabel* dot = new QLabel(QString::fromUtf8("●"), frame);
-    dot->setStyleSheet(QString("color:%1; font-size:10px;").arg(dotColor));
-    headerRow->addWidget(dot);
+    for (QTableWidgetItem* it : {timeItem, levelItem, srcItem, msgItem}) {
+        if (record.resolved) {
+            it->setForeground(QColor("#666"));
+        }
+    }
+    levelItem->setForeground(QColor(record.resolved ? "#666" : levelColor));
+    levelItem->setData(Qt::UserRole + 2, levelText);         // cache level text
+    levelItem->setData(Qt::UserRole + 3, levelColor);        // cache level color
+    levelItem->setData(Qt::UserRole + 1, record.resolved);   // resolved flag
 
-    QLabel* badgeLabel = new QLabel(badge, frame);
-    badgeLabel->setStyleSheet(
-        QString("color:%1; font-weight:bold; font-size:9px;").arg(badgeColor));
-    headerRow->addWidget(badgeLabel);
-
-    headerRow->addStretch();
-
-    QLabel* timeLabel = new QLabel(timeStr, frame);
-    timeLabel->setStyleSheet("color:#666; font-size:8px;");
-    headerRow->addWidget(timeLabel);
-
-    frameLayout->addLayout(headerRow);
-
-    // 第二行: 报警消息 (自动折行)
-    QLabel* msgLabel = new QLabel(record.message, frame);
-    msgLabel->setWordWrap(true);
-    msgLabel->setStyleSheet(
-        QString("color:%1; font-size:9px; padding-left:4px;").arg(
-            record.resolved ? "#78909c" : "#ccc"));
-    frameLayout->addWidget(msgLabel);
-
-    // 插入到顶部
-    m_alarmLayout->insertWidget(0, frame);
-    m_alarmFrames.prepend(frame);
+    m_table->setItem(0, 0, timeItem);
+    m_table->setItem(0, 1, levelItem);
+    m_table->setItem(0, 2, srcItem);
+    m_table->setItem(0, 3, msgItem);
+    m_table->setRowHeight(0, 20);
 
     // 限制最多 200 条
-    while (m_alarmFrames.size() > 200) {
-        QFrame* last = m_alarmFrames.takeLast();
-        m_alarmLayout->removeWidget(last);
-        delete last;
+    while (m_table->rowCount() > 200) {
+        m_table->removeRow(m_table->rowCount() - 1);
     }
 
     if (!record.resolved) {
@@ -159,23 +133,18 @@ void AlarmListWidget::onNewAlarm(AlarmRecord record)
 
 void AlarmListWidget::onAlarmResolved(int alarmId)
 {
-    for (QFrame* frame : m_alarmFrames) {
-        if (frame->property("alarmId").toInt() == alarmId) {
-            frame->setProperty("resolved", true);
-            frame->setStyleSheet(
-                "QFrame { background:#1a1a2e; border-left:3px solid #444; "
-                "border-radius:2px; }");
+    for (int r = 0; r < m_table->rowCount(); ++r) {
+        QTableWidgetItem* item = m_table->item(r, 0);
+        if (!item || item->data(Qt::UserRole).toInt() != alarmId) continue;
+        if (item->data(Qt::UserRole + 1).toBool()) continue; // already resolved
 
-            // 更新子控件的颜色
-            QList<QLabel*> labels = frame->findChildren<QLabel*>();
-            for (QLabel* label : labels) {
-                label->setStyleSheet(label->styleSheet().replace(
-                    QString::fromUtf8("#f44336"), "#78909c").replace(
-                    QString::fromUtf8("#ff9800"), "#78909c").replace(
-                    QString::fromUtf8("#fff"), "#78909c"));
-            }
-            break;
+        // Mark resolved
+        item->setData(Qt::UserRole + 1, true);
+        for (int c = 0; c < 4; ++c) {
+            QTableWidgetItem* cell = m_table->item(r, c);
+            if (cell) cell->setForeground(QColor("#666"));
         }
+        break;
     }
     if (m_activeCount > 0) {
         m_activeCount--;

@@ -68,7 +68,7 @@ start "chipSetter" chipSetter.exe
         # Schedule 10s in future, wait for scheduler to fire (NO /run — preserves /it)
         $startTime = (Get-Date).AddSeconds(30).ToString("HH:mm:ss")
         $taskName = "chipSetter-direct"
-        schtasks /create /tn $taskName /tr "cmd /c `"$batch`"" /sc once /st $startTime /it /f 2>&1
+        $null = schtasks /create /tn $taskName /tr "cmd /c `"$batch`"" /sc once /st $startTime /it /f 2>&1
         Write-Host "Task scheduled at $startTime, waiting for scheduler..."
         Start-Sleep -Seconds 35
 

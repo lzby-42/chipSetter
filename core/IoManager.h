@@ -7,7 +7,7 @@
  *   - 检测信号变化, 通过信号通知UI
  *   - 限位信号联动报警 (通过信号通知 AlarmLogger)
  *
- * 依赖: IGncController, HardwareConfig.h, IoSignal.h
+ * 依赖: GncController, HardwareConfig.h, IoSignal.h
  */
 
 #ifndef IOMANAGER_H
@@ -25,7 +25,7 @@ class IoManager : public QObject
     Q_OBJECT
 
 public:
-    explicit IoManager(IGncController* controller, QObject *parent = nullptr);
+    explicit IoManager(GncController* controller, QObject *parent = nullptr);
     ~IoManager();
 
     // ---- 初始化 ----
@@ -56,7 +56,7 @@ private slots:
 private:
     void detectChanges();                       // 检测变化并发射信号
 
-    IGncController*  m_controller;
+    GncController*  m_controller;
     QTimer*          m_pollTimer;
 
     QVector<IoSignal> m_diSignals;              // 16路DI

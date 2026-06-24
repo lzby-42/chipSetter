@@ -15,6 +15,7 @@ MotorPtpWidget::MotorPtpWidget(QWidget *parent)
     : QWidget(parent)
     , m_selectedAxisId(1)
     , m_currentPosition(0.0)
+    , m_axisEnabled(false)
 {
     setupUI();
 }
@@ -133,6 +134,26 @@ void MotorPtpWidget::setupUI()
     jogLayout->addWidget(jogMinusBtn);
 
     controlLayout->addLayout(jogLayout);
+
+    // clear alarm / enable
+    QVBoxLayout* auxLayout = new QVBoxLayout();
+    auxLayout->setSpacing(2);
+
+    m_clearAlarmBtn = new QPushButton("清报警", this);
+    m_clearAlarmBtn->setFixedSize(55, 26);
+    m_clearAlarmBtn->setStyleSheet(
+        "QPushButton{background:#4a148c;color:#fff;border:none;border-radius:2px;font-size:9px;}"
+        "QPushButton:hover{background:#6a1b9a;}");
+    auxLayout->addWidget(m_clearAlarmBtn);
+
+    m_enableBtn = new QPushButton("使能", this);
+    m_enableBtn->setFixedSize(55, 26);
+    m_enableBtn->setStyleSheet(
+        "QPushButton{background:#1b5e20;color:#fff;border:none;border-radius:2px;font-size:9px;}"
+        "QPushButton:hover{background:#2e7d32;}");
+    auxLayout->addWidget(m_enableBtn);
+
+    controlLayout->addLayout(auxLayout);
     mainLayout->addLayout(controlLayout);
 
     // ---- speed params: vel / acc / dec ----
@@ -169,6 +190,8 @@ void MotorPtpWidget::setupUI()
     connect(m_homeBtn, &QPushButton::clicked, this, &MotorPtpWidget::onHomeClicked);
     connect(jogPlusBtn,  &QPushButton::clicked, this, &MotorPtpWidget::onJogPlusClicked);
     connect(jogMinusBtn, &QPushButton::clicked, this, &MotorPtpWidget::onJogMinusClicked);
+    connect(m_clearAlarmBtn, &QPushButton::clicked, this, &MotorPtpWidget::onClearAlarmClicked);
+    connect(m_enableBtn, &QPushButton::clicked, this, &MotorPtpWidget::onEnableClicked);
 }
 
 int MotorPtpWidget::currentAxisId() const
@@ -231,4 +254,26 @@ void MotorPtpWidget::onHomeFinished(int axisId, bool success, int stage)
 void MotorPtpWidget::onAxisStatusChanged(int axisId, long status)
 {
     Q_UNUSED(axisId); Q_UNUSED(status);
+}
+
+void MotorPtpWidget::onClearAlarmClicked()
+{
+    emit clearAlarmRequested(m_selectedAxisId);
+}
+
+void MotorPtpWidget::onEnableClicked()
+{
+    m_axisEnabled = !m_axisEnabled;
+    if (m_axisEnabled) {
+        m_enableBtn->setText("失能");
+        m_enableBtn->setStyleSheet(
+            "QPushButton{background:#b71c1c;color:#fff;border:none;border-radius:2px;font-size:9px;}"
+            "QPushButton:hover{background:#d32f2f;}");
+    } else {
+        m_enableBtn->setText("使能");
+        m_enableBtn->setStyleSheet(
+            "QPushButton{background:#1b5e20;color:#fff;border:none;border-radius:2px;font-size:9px;}"
+            "QPushButton:hover{background:#2e7d32;}");
+    }
+    emit enableRequested(m_selectedAxisId, m_axisEnabled);
 }

@@ -35,7 +35,7 @@ int AlarmLogger::activeCount() const
 {
     int cnt = 0;
     for (const AlarmRecord& rec : m_records) {
-        if (!rec.resolved) ++cnt;
+        if (!rec.resolved && rec.level != ALARM_LEVEL_INFO) ++cnt;
     }
     return cnt;
 }

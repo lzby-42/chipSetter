@@ -1,12 +1,13 @@
 /**
  * @file MotorPtpWidget.h
- * @brief 电机点位运动面板 — 轴选择、位置输入、加减速、运行/停止/回零/JOG
+ * @brief 电机点位运动面板 — 轴选择、位置输入、加减速、运行/停止/回零/JOG/清报警/使能
  *
  * 职责:
  *   - 13轴快捷选择
  *   - 显示当前位置/输入目标位置
  *   - 设置速度/加速度/减速度
  *   - 运行/停止/回零/微调JOG按钮
+ *   - 清报警/使能失能按钮
  *
  * 纯UI: 按钮点击 → 发射信号 → MotorManager处理 → 信号返回 → 更新显示
  */
@@ -47,6 +48,8 @@ signals:
     void stopRequested(int axisId);
     void homeRequested(int axisId);
     void jogRequested(int axisId, bool positive, double step, double vel, double acc, double dec);
+    void clearAlarmRequested(int axisId);                 // 清当前轴报警
+    void enableRequested(int axisId, bool enable);        // 使能/失能
 
 private slots:
     void onAxisButtonClicked(int axisId);   // 轴选择
@@ -55,6 +58,8 @@ private slots:
     void onHomeClicked();                   // 回零按钮
     void onJogPlusClicked();                // JOG+
     void onJogMinusClicked();               // JOG-
+    void onClearAlarmClicked();             // 清报警
+    void onEnableClicked();                 // 使能/失能切换
 
 private:
     void setupUI();
@@ -74,6 +79,10 @@ private:
     QPushButton*    m_runBtn;
     QPushButton*    m_stopBtn;
     QPushButton*    m_homeBtn;
+    QPushButton*    m_clearAlarmBtn;
+    QPushButton*    m_enableBtn;
+
+    bool            m_axisEnabled;          // 当前选中轴的使能状态
 };
 
 #endif // MOTORPTPWIDGET_H

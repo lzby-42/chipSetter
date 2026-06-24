@@ -1,0 +1,1 @@
+- [IO硬件对接](.claude/memory/io-hardware-integration.md) — 从Mock到GTS SDK的IO系统对接、MC_GPI踩坑、报警接入

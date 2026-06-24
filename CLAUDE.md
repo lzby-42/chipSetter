@@ -8,19 +8,22 @@ Qt 5.15.2 C++ 上位机，运行于固高 GNC-C610 工控机 (Win10, 192.168.1.2
 
 ## 最重要的事
 
-1. **双模式编译**：Mock（本地无硬件）和 Real GNC（工控机真实硬件），通过 `CONFIG+=real_gnc` 切换
-2. **IO信号来源**：Real模式通过 GTS SDK (`GT_GetDi(MC_GPI=4)`) 读 GPI 寄存器；Mock 模式用 `MockGncController` 返回假数据
-3. **不要直接 include gts.h**：只有 `GncController.h`（在 Real 模式下）才 include，其他文件通过 `IGncController` 接口访问硬件
-4. **日志位置**：工作目录下的 `chipsetter_debug.log`
+1. **不要直接 include gts.h**：只有 `GncController.h` 才 include，其他文件通过 `GncController` 类访问硬件
+2. **日志位置**：工作目录下的 `chipsetter_debug.log`
 
 ## 硬件架构
 
 ```
-UI (widgets/) ──Signal/Slot──> Core (core/) ──IGncController──> GTS SDK (googol/gts.dll)
-                                                                    └── GNC-C610 运动控制器
-                                                                        └── 19路DI (X0-X18, GPI1-19)
-                                                                        └── 4路DO (Y9-Y12, GPO9-12)
-                                                                        └── 13轴 (胶盘, 点胶, 取晶...)
+UI (widgets/) ──Signal/Slot──> Core (core/) ──GncController──> GTS SDK (googol/gts.dll)
+                                │                                  └── GNC-C610 运动控制器
+                                │                                      └── 19路DI (X0-X18, GPI1-19)
+                                │                                      └── 4路DO (Y9-Y12, GPO9-12)
+                                │                                      └── 13轴 (胶盘, 点胶, 取晶...)
+                                ├── ProcessManager (9步状态机)
+                                │     ├── DispensingPlatformController (轴2+3)
+                                │     └── PickupPlatformController (轴10+11)
+                                ├── AlarmLogger (报警触发/恢复/历史)
+                                └── StatsCollector (产量/时长/节拍)
 ```
 
 ### IO 信号映射 (HardwareConfig.h)
@@ -59,29 +62,27 @@ UI (widgets/) ──Signal/Slot──> Core (core/) ──IGncController──> 
 ### 统一调度脚本 (推荐)
 
 ```bash
-# 所有操作用一个脚本搞定:
 powershell -File scripts/workflow.ps1 <命令> [选项]
 
 # 命令:
-#   test     实机测试全流程: Real GNC编译 → 打包 → 部署 → 远端启动 (默认)
-#   debug    F5调试: 同上
+#   test     实机测试全流程: 编译 → 打包 → 部署 → 远端启动 (默认)
+#   debug    F5调试: 同上 (走 gdbserver)
 #   quick    跳过编译: 打包 → 部署 → 启动 (已编译过时用)
-#   build    Mock 编译
-#   build-real Real GNC 编译
+#   build    仅编译
 #   package  仅打包
 #   deploy   仅部署
-#   start    仅远端启动
+#   start    仅远端启动 (直接启动, 无 gdbserver)
 #   stop     仅远端停止
-#   full     Mock 全流程 (无部署)
 ```
 
-### Mock 模式（本地开发）
+### 编译
 ```bash
 powershell -File scripts/workflow.ps1 build
-# 输出: debug/chipSetter.exe (无硬件依赖)
+# 或: scripts\build_debug.bat (双击运行)
+# 输出: debug/chipSetter.exe
 ```
 
-### Real GNC 模式（部署到工控机）
+### 部署到工控机
 ```bash
 powershell -File scripts/workflow.ps1 test
 # 完整链路: 编译 → 打包 → 部署 → 启动
@@ -89,33 +90,44 @@ powershell -File scripts/workflow.ps1 test
 
 ### 测试
 ```bash
-cd tests && qmake && make && ./debug/test_hardware_config.exe
+cd tests && qmake tests.pro && make -f Makefile.Debug -j4
+
+# 运行全部测试:
+./debug/test_hardware_config.exe -txt    # 9 个测试: 轴/DI/DO 计数、名称、ID范围、默认值
+./debug/test_motor_axis.exe -txt         # 4 个测试: 默认构造、自定义ID、元类型注册、范围
+./debug/test_process_manager.exe -txt    # 8 个测试: 初始状态、循环、暂停继续、收尾、急停、步骤定义
 ```
-3 个测试：test_hardware_config, test_motor_axis, test_process_manager
 
 ## 关键文件
 
 | 文件 | 职责 |
 |------|------|
-| `chipSetter.pro` | qmake 工程，Mock/Real 互斥编译控制 |
+| `chipSetter.pro` | qmake 工程，固定 GTS SDK 编译 |
 | `core/HardwareConfig.h` | 常量定义：AXIS_COUNT=13, DI_COUNT=19, DO_COUNT=4, DO_INDEX_BASE=9 |
-| `core/GncController.h` | **硬件隔离层**：IGncController 接口 + (Mock模式下) MockGncController；Real 模式下 include gts.h |
-| `core/GncControllerImpl.h/.cpp` | **真实 GTS SDK 实现**（仅 Real 模式编译），调用 GT_GetDi/GT_SetDoBit/GT_Open 等 |
+| `core/GncController.h/.cpp` | **GTS SDK 封装**：GT_Open/GT_GetDi/GT_SetDoBit 等全部硬件操作，SDK 错误追踪 |
 | `core/IoManager.h/.cpp` | IO 管理器：50ms 轮询 DI/DO，变化检测，发出 diChanged/doChanged 信号 |
 | `core/MotorManager.h/.cpp` | 13 轴状态管理，运动控制 |
-| `core/ProcessManager.h/.cpp` | 9 步工艺状态机 |
-| `mainwindow.h/.cpp` | 主窗口：#ifdef USE_REAL_GNC 选择创建 GncControllerImpl 或 MockGncController |
-| `main.cpp` | 入口：文件日志初始化，构建模式输出 |
+| `core/ProcessManager.h/.cpp` | 9 步工艺状态机，持有 DispensingPlatform/PickupPlatform 引用 |
+| `core/DispensingPlatformController.h/.cpp` | 点胶平台（轴2=X, 轴3=Y）：X→Y 回零序列 + 双轴并发点位移动，错误上报 AlarmLogger |
+| `core/PickupPlatformController.h/.cpp` | 取晶平台（轴10=X, 轴11=Y）：X→Y 回零序列 + 双轴并发点位移动，错误上报 AlarmLogger |
+| `core/AlarmLogger.h/.cpp` | 报警管理器：报警触发/恢复，历史记录，活跃计数，自增 ID |
+| `core/StatsCollector.h/.cpp` | 生产统计：产量、运行时长（小时）、平均节拍（秒/件），1秒定时器更新 |
+| `models/MotorAxis.h` | 轴状态数据模型（位置/速度/限位/状态标志，13个字段） |
+| `models/IoSignal.h` | IO 信号数据模型（ID/类型/名称/值） |
+| `models/AlarmRecord.h` | 报警记录数据模型（ID/时间戳/级别/来源/消息/已解决） |
+| `mainwindow.h/.cpp` | 主窗口：创建全部 8 个 Core 模块、11 个 Widget，信号连线总控 |
+| `main.cpp` | 入口：文件日志初始化，QSS 加载 |
 | `googol/` | GTS SDK 文件：gts.h, gts.lib, gts.dll, gt_rn.dll, core1_20261212.cfg |
-| `scripts/build_debug.bat` | Mock 一键编译 |
-| `scripts/build_deploy.bat` | Real GNC 一键编译 |
+| `scripts/workflow.ps1` | **统一调度脚本**：编译→打包→部署→启动/停止（test/debug/quick/build 等 7 个命令） |
+| `scripts/build_debug.bat` | 一键编译（双击运行） |
 | `tests/` | 3 个单元测试 |
+| `.vscode/start_direct.ps1` | 直接启动 chipSetter.exe（无 gdbserver），用于实机测试（区别于 F5 调试） |
 
-## IO 信号流（Real 模式）
+## IO 信号流
 
 ```
 IoManager::onPollTimer()  [每50ms]
-  └→ GncControllerImpl::readDI(core=1, diType=MC_GPI=4, diIndex=1, values, count=19)
+  └→ GncController::readDI(core=1, diType=MC_GPI=4, diIndex=1, values, count=19)
        └→ GT_GetDi(4, &bitmask)          // GTS SDK: 读 GPI 32位掩码
             └→ values[i] = (bitmask >> i) & 1   // 逐位提取
   └→ IoManager::detectChanges()
@@ -247,6 +259,19 @@ ProcessManager 状态 → UI 更新
   realtimeDataUpdated(int,QVariantMap) → lambda → StepDetailPanel::updateRealtimeData
   cycleCompleted(int) → lambda → StatsCollector::incrementCount()
 
+平台控制器 (ProcessManager 内部调用)
+  DispensingPlatformController → MotorManager (轴2+3 home/moveTo/stop)
+  PickupPlatformController     → MotorManager (轴10+11 home/moveTo/stop)
+  两者均通过 AlarmLogger::raiseAlarm() 上报运动错误
+
+AlarmLogger 状态 → UI 更新
+  newAlarm(AlarmRecord)    → AlarmListWidget 追加报警行
+  alarmResolved(int)       → AlarmListWidget 标记已恢复
+  activeCountChanged(int)  → StatusBarWidget 报警计数
+
+StatsCollector → UI 更新
+  statsUpdated(count,hours,cycleTime) → StatusBarWidget 刷新产量/节拍/时长
+
 FlowStepBar 用户交互
   stepClicked(int) → lambda(查询 ProcessManager) → StepDetailPanel::showStepDetail(...)
 
@@ -272,25 +297,20 @@ StatusBar 模式切换
 
 ### 添加新 IO 信号
 1. 修改 `core/HardwareConfig.h`：更新 DI_COUNT/DO_COUNT，添加宏定义，更新 DI_NAMES/DI_AXIS_MAP
-2. 如改变数量，更新 `core/GncController.cpp`（Mock 数组大小）
-3. 如改变 DI 网格布局，更新 `widgets/IoMonitorWidget.cpp`
+2. 如改变 DI 网格布局，更新 `widgets/IoMonitorWidget.cpp`
 
-### MC_GPI/MC_GPO 的正确值
-- **Real 模式**: MC_GPI=4, MC_GPO=12 (来自 gts.h)
-- **Mock 模式**: MC_GPI=0, MC_GPO=1 (GncController.h 中定义)
-- 两种模式互斥编译，值不会冲突
+### MC_GPI/MC_GPO
+- MC_GPI=4, MC_GPO=12 (来自 gts.h)，读写时直接使用
 
 ### 调试
 - 所有 qDebug() 输出写入 `chipsetter_debug.log`
-- 启动时的构建模式、日志路径、MC_GPI 值都会记录
+- 启动时日志路径、MC_GPI 值都会记录
 - 前 3 次 IO 轮询结果详细记录（包括 bitmask 和提取的 values）
 - GTS SDK 调用错误记录在 qWarning 中
 
 ### 已知问题
-- `test_io_alarm_models` 测试缺失（.pro 存在但 .cpp 不存在），已从 tests.pro 移除
 - Qt 5.15.2 存在 QButtonGroup::buttonClicked 弃用警告（预存问题）
-- GncControllerImpl 的软限位设置暂未实现运行时修改（需通过 GT_SetMcConfig）
-- TStandardHomePrm/TStandardHomeStatus 在 Real/Mock 模式下布局不同（各自独立编译，无 ABI 问题）
+- 软限位设置暂未实现运行时修改（需通过 GT_SetMcConfig）
 - **emergencyStop() 未重置子步骤状态**：仅设 `m_substepProgress=0`，但 `m_substepStates` 数组保留旧值。`startCycle()` 重新初始化时会覆盖，但急停后如果不走 startCycle 直接查询子步骤会看到过期数据。
 
 ### 远程调试 (VS Code)
@@ -303,7 +323,7 @@ StatusBar 模式切换
 
 ---
 
-### .vscode 工具链全景 (6个文件)
+### .vscode 工具链全景 (7个文件)
 
 #### 文件清单
 
@@ -314,6 +334,7 @@ StatusBar 模式切换
 | `package_debug.ps1` | windeployqt + googol/gts.dll + gdbserver + MinGW DLL → `debug_deploy/` |
 | `deploy_to_target.ps1` | net use SMB 预建连接 → robocopy /E → GNC `\\192.168.1.2\share\chipSetter` |
 | `start_gdbserver.ps1` | WinRM → PsExec → 手动 三级降级, 远端启动 gdbserver `--once 0.0.0.0:1234` |
+| `start_direct.ps1` | 直接启动 chipSetter.exe (无 gdbserver), 用于实机测试 (非调试) |
 | `stop_gdbserver.ps1` | WinRM 远端杀 chipSetter + gdbserver 进程, 删除计划任务 |
 
 #### launch.json: 3 种调试配置
@@ -353,7 +374,7 @@ StatusBar 模式切换
 | `远端结束 gdbserver` | powershell | stop_gdbserver.ps1 |
 | `远端启动 gdbserver` | powershell | start_gdbserver.ps1 |
 
-**注意**: Task `qmake Debug` 编译的是 Mock 模式。如需 Real GNC 模式, 需手动运行 `qmake CONFIG+=real_gnc` 或用 `scripts/build_deploy.bat`。
+**注意**: 新增 `.cpp/.h` 或修改 `.pro` 后需手动运行 `qmake Debug` task。
 
 #### package_debug.ps1: 打包流程
 
@@ -428,7 +449,7 @@ WinRM → Invoke-Command:
 
 | 场景 | 操作 |
 |------|------|
-| 改代码调试 | 直接 F5 (增量编译自动部署, 默认 Mock 模式) |
+| 改代码调试 | 直接 F5 (增量编译自动部署) |
 | 实机测试 | `powershell -File scripts/workflow.ps1 test` (全链路) |
 | 快速部署 | `powershell -File scripts/workflow.ps1 quick` (已编译过) |
 | 仅远端启动 | `powershell -File scripts/workflow.ps1 start` |
@@ -442,11 +463,11 @@ WinRM → Invoke-Command:
 | 脚本 | 用途 | 关键参数 |
 |------|------|----------|
 | `scripts/workflow.ps1` | **统一调度** (编译→打包→部署→启动) | `test`/`quick`/`build`/`start`/`stop` |
-| `scripts/build_debug.bat` | Mock 编译 (MSYS2 终端内运行) | `clean` 清旧文件 |
-| `scripts/build_deploy.bat` | Real GNC 编译 (MSYS2 终端内运行) | `clean` |
+| `scripts/build_debug.bat` | 一键编译 (双击运行) | `clean` 清旧文件 |
 | `.vscode/package_debug.ps1` | windeployqt + googol/ + MinGW DLL → debug_deploy | 无参数, 全自动 |
 | `.vscode/deploy_to_target.ps1` | net use SMB → robocopy /E → GNC | `-TargetShare` |
 | `.vscode/start_gdbserver.ps1` | WinRM → PsExec → 手动 三级降级 | `-TargetIp -Port` |
+| `.vscode/start_direct.ps1` | 直接启动 (无 gdbserver)，实机测试用 | `-TargetIp` |
 | `.vscode/stop_gdbserver.ps1` | WinRM 远端杀 gdbserver + chipSetter | 需要凭证文件 |
 
 凭证: `~\.chipsetter_cred.xml` (Export-Clixml 加密, 仅本机本用户可解密)

@@ -1,13 +1,10 @@
 @echo off
 REM ============================================================
-REM chipSetter — 编译 Debug 版本 (Windows 批处理包装)
+REM chipSetter — 编译 Debug 版本 (GTS SDK)
 REM
 REM 用法:
-REM   双击运行, 或在项目根目录命令行中:
-REM     scripts\build_debug.bat
-REM
-REM 带清理:
-REM     scripts\build_debug.bat clean
+REM   scripts\build_debug.bat         编译
+REM   scripts\build_debug.bat clean   清理后编译
 REM ============================================================
 setlocal
 
@@ -30,7 +27,10 @@ echo ============================================
 set "CLEAN_ARG="
 if "%1"=="clean" set "CLEAN_ARG=clean"
 
-"%BASH%" -lc "export MSYSTEM=MINGW32; export QT_PATH='%QT_PATH%'; export MINGW_PATH=/mingw32; export PATH=%QT_PATH%/bin:/mingw32/bin:$PATH; cd '%CD%'; bash scripts/build_debug.sh %CLEAN_ARG% 2>&1"
+set "SCRIPT_DIR=%CD:\=/%"
+set "MSYSTEM=MINGW32"
+set "QT_PATH=%QT_PATH:\=/%"
+"%BASH%" -lc "export PATH=%QT_PATH%/bin:/mingw32/bin:$PATH; cd '%SCRIPT_DIR%'; bash scripts/build_debug.sh %CLEAN_ARG% 2>&1"
 
 if %ERRORLEVEL% neq 0 (
     echo.

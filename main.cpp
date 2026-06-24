@@ -49,11 +49,7 @@ int main(int argc, char *argv[])
     QString logAbsPath = logInfo.absoluteFilePath();
     qDebug() << "=== chipSetter V1.0 ===";
     qDebug() << "日志文件:" << logAbsPath;
-#ifdef USE_REAL_GNC
-    qDebug() << "构建模式: 真实硬件 (GTS SDK)";
-#else
-    qDebug() << "构建模式: Mock模拟";
-#endif
+    qDebug() << "构建模式: GTS SDK";
 
     QApplication app(argc, argv);
     app.setApplicationName("chipSetter");
