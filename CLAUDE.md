@@ -56,17 +56,35 @@ UI (widgets/) ──Signal/Slot──> Core (core/) ──IGncController──> 
 
 ## 编译
 
+### 统一调度脚本 (推荐)
+
+```bash
+# 所有操作用一个脚本搞定:
+powershell -File scripts/workflow.ps1 <命令> [选项]
+
+# 命令:
+#   test     实机测试全流程: Real GNC编译 → 打包 → 部署 → 远端启动 (默认)
+#   debug    F5调试: 同上
+#   quick    跳过编译: 打包 → 部署 → 启动 (已编译过时用)
+#   build    Mock 编译
+#   build-real Real GNC 编译
+#   package  仅打包
+#   deploy   仅部署
+#   start    仅远端启动
+#   stop     仅远端停止
+#   full     Mock 全流程 (无部署)
+```
+
 ### Mock 模式（本地开发）
 ```bash
-scripts/build_debug.bat
+powershell -File scripts/workflow.ps1 build
 # 输出: debug/chipSetter.exe (无硬件依赖)
 ```
 
 ### Real GNC 模式（部署到工控机）
 ```bash
-scripts/build_deploy.bat
-# 等价于: qmake CONFIG+=real_gnc && make
-# 输出: debug/chipSetter.exe (链接 googol/gts.lib)
+powershell -File scripts/workflow.ps1 test
+# 完整链路: 编译 → 打包 → 部署 → 启动
 ```
 
 ### 测试
@@ -411,19 +429,24 @@ WinRM → Invoke-Command:
 | 场景 | 操作 |
 |------|------|
 | 改代码调试 | 直接 F5 (增量编译自动部署, 默认 Mock 模式) |
-| 新增 .cpp/.h | Ctrl+Shift+P → `qmake Debug` → F5 |
-| 改 .pro | Ctrl+Shift+P → `qmake Debug` → F5 |
+| 实机测试 | `powershell -File scripts/workflow.ps1 test` (全链路) |
+| 快速部署 | `powershell -File scripts/workflow.ps1 quick` (已编译过) |
+| 仅远端启动 | `powershell -File scripts/workflow.ps1 start` |
+| 仅远端停止 | `powershell -File scripts/workflow.ps1 stop` |
+| 新增 .cpp/.h | 先跑 `qmake Debug` task 再编译 |
+| 改 .pro | 先跑 `qmake Debug` task 再编译 |
 | GNC 端 | 需保持登录 (RDP/本地), 否则 schtasks /it 无交互会话可投递 |
-| 实机测试 (非调试) | `scripts/build_deploy.bat` → `powershell -File .vscode/package_debug.ps1` → `powershell -File .vscode/deploy_to_target.ps1` |
-| 仅部署 (不编译) | 直接跑 `package_debug.ps1` + `deploy_to_target.ps1` |
 
 #### 脚本速查
 
 | 脚本 | 用途 | 关键参数 |
 |------|------|----------|
+| `scripts/workflow.ps1` | **统一调度** (编译→打包→部署→启动) | `test`/`quick`/`build`/`start`/`stop` |
+| `scripts/build_debug.bat` | Mock 编译 (MSYS2 终端内运行) | `clean` 清旧文件 |
+| `scripts/build_deploy.bat` | Real GNC 编译 (MSYS2 终端内运行) | `clean` |
 | `.vscode/package_debug.ps1` | windeployqt + googol/ + MinGW DLL → debug_deploy | 无参数, 全自动 |
-| `.vscode/deploy_to_target.ps1` | net use SMB → robocopy /E → GNC | `-TargetShare` 默认 `\\192.168.1.2\share\chipSetter` |
-| `.vscode/start_gdbserver.ps1` | WinRM → PsExec → 手动 三级降级 | `-TargetIp -Port -RemoteExePath` |
+| `.vscode/deploy_to_target.ps1` | net use SMB → robocopy /E → GNC | `-TargetShare` |
+| `.vscode/start_gdbserver.ps1` | WinRM → PsExec → 手动 三级降级 | `-TargetIp -Port` |
 | `.vscode/stop_gdbserver.ps1` | WinRM 远端杀 gdbserver + chipSetter | 需要凭证文件 |
 
 凭证: `~\.chipsetter_cred.xml` (Export-Clixml 加密, 仅本机本用户可解密)
