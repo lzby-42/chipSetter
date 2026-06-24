@@ -1,17 +1,13 @@
 /**
  * @file GncController.h
- * @brief GNC运动控制器SDK封装 — 前后端隔离层
+ * @brief GTS SDK 封装 — 对接固高 GNC-C610 运动控制器
  *
- * 设计:
- *   - 纯虚接口 IGncController 定义所有硬件操作
- *   - MockGncController 提供无硬件时的模拟实现 (仅Mock模式编译)
- *   - GncControllerImpl 提供真实GTS SDK实现 (仅Real模式编译)
- *
- * 铁律: UI层绝不直接 #include "gts.h", 只通过此接口与硬件交互
- *
- * 编译模式:
- *   USE_REAL_GNC → include "googol/gts.h" (真实MC_GPI=4等)
- *   !USE_REAL_GNC → Mock结构体和常量
+ * 职责:
+ *   - 封装 GT_Open/GT_Close/GT_LoadConfig 等SDK生命周期
+ *   - 封装 GT_AxisOn/GT_ClrSts/GT_ZeroPos 等轴操作
+ *   - 封装 GT_GetDi/GT_SetDoBit 等IO操作
+ *   - 封装 GT_GetPrfPos/GT_GetSts 等状态读取
+ *   - SDK错误追踪, 通过 hardwareError 信号上报
  */
 
 #ifndef GNCCONTROLLER_H
@@ -19,15 +15,15 @@
 
 #include <QObject>
 #include <QTimer>
-#include <QVector>
-#include <QMap>
+#include <QString>
 #include <cmath>
-#include <cstdlib>
+
+#include "googol/gts.h"
 
 // ============================================================
-// 真实GTS SDK 或 Mock模拟 (二选一, 由chipSetter.pro控制)
+// 自定义结构体 (gts.h 中无对应定义)
 // ============================================================
-// TMoveAbsolutePrmEx 两种模式都需要 (gts.h中无此结构体)
+
 struct TMoveAbsolutePrmEx {
     double pos;
     double vel;
@@ -40,7 +36,6 @@ struct TMoveAbsolutePrmEx {
     double decEndPercent;
 };
 
-// TLimitInfo — gts.h中无此类型, 两种模式都需要
 struct TLimitInfo {
     short hwLmtPositiveEnable;
     short hwLmtNegativeEnable;
@@ -52,169 +47,60 @@ struct TLimitInfo {
     short swLmtNegativeStatus;
 };
 
-#ifdef USE_REAL_GNC
-    #include "googol/gts.h"
-    // gts.h 提供: MC_GPI=4, MC_GPO=12, MC_LIMIT_POSITIVE=0, ...
-    // gts.h 提供: TStandardHomePrm, TStandardHomeStatus
-#else
-    // ---- Mock结构体与常量 (与GTS SDK无关) ----
+// ============================================================
+// GncController — GTS SDK 唯一实现
+// ============================================================
 
-    struct TStandardHomePrm {
-        short mode;
-        double highSpeed;
-        double lowSpeed;
-        double acc;
-        double offset;
-        short check;
-        short autoZeroPos;
-        short motorStopDelay;
-    };
-
-    struct TStandardHomeStatus {
-        short run;
-        short stage;
-        short error;
-        long  capturePos;
-    };
-
-    // Mock IO常量
-    #define MC_GPI              0
-    #define MC_GPO              1
-    #define MC_LIMIT_POSITIVE   0
-    #define MC_LIMIT_NEGATIVE   1
-    #define MC_ALARM            2
-    #define MC_HOME             3
-
-#endif // USE_REAL_GNC
-
-/**
- * @class IGncController
- * @brief GNC SDK 抽象接口
- */
-class IGncController : public QObject
+class GncController : public QObject
 {
     Q_OBJECT
 
 public:
-    explicit IGncController(QObject *parent = nullptr) : QObject(parent) {}
-    virtual ~IGncController() {}
+    explicit GncController(QObject *parent = nullptr);
+    ~GncController() override;
 
     // ---- 生命周期 ----
-    virtual bool openCard() = 0;
-    virtual bool netInit(const QString& xmlFile, int overTimeSec = 120) = 0;
-    virtual bool loadConfig(short core, const QString& cfgFile) = 0;
-    virtual bool closeCard() = 0;
-    virtual bool isConnected() const = 0;
+    bool openCard();
+    bool netInit(const QString& xmlFile, int overTimeSec = 120);
+    bool loadConfig(short core, const QString& cfgFile);
+    bool closeCard();
+    bool isConnected() const;
 
     // ---- 轴操作 ----
-    virtual bool axisOn(short core, short axis) = 0;
-    virtual bool axisOff(short core, short axis) = 0;
-    virtual bool clearStatus(short core, short axis, short count) = 0;
-    virtual bool zeroPosition(short core, short axis) = 0;
+    bool axisOn(short core, short axis);
+    bool axisOff(short core, short axis);
+    bool clearStatus(short core, short axis, short count);
+    bool zeroPosition(short core, short axis);
 
     // ---- 点位运动 ----
-    virtual bool moveAbsolute(short core, short axis, const TMoveAbsolutePrmEx& prm) = 0;
+    bool moveAbsolute(short core, short axis, const TMoveAbsolutePrmEx& prm);
+    bool stopMove(short core, short axis);       // 平滑停止 (GT_Stop, 带减速)
 
     // ---- 回零 ----
-    virtual bool executeHome(short core, short axis, const TStandardHomePrm& prm) = 0;
-    virtual bool getHomeStatus(short core, short axis, TStandardHomeStatus& sts) = 0;
+    bool executeHome(short core, short axis, const TStandardHomePrm& prm);
+    bool getHomeStatus(short core, short axis, TStandardHomeStatus& sts);
 
     // ---- 状态读取 ----
-    virtual bool getAxisStatus(short core, short axis, long& status, unsigned long& clock) = 0;
-    virtual bool getProfilePosition(short core, short axis, double& prfPos, unsigned long& clock) = 0;
-    virtual bool getLimitInfo(short core, short axis, TLimitInfo& info) = 0;
+    bool getAxisStatus(short core, short axis, long& status, unsigned long& clock);
+    bool getProfilePosition(short core, short axis, double& prfPos, unsigned long& clock);
+    bool getLimitInfo(short core, short axis, TLimitInfo& info);
 
     // ---- IO操作 ----
-    virtual bool readDI(short core, short diType, short diIndex, short* values, short count) = 0;
-    virtual bool writeDO(short core, short doType, short doIndex, short* values, short count) = 0;
+    bool readDI(short core, short diType, short diIndex, short* values, short count);
+    bool writeDO(short core, short doType, short doIndex, short* values, short count);
 
     // ---- 软限位 ----
-    virtual bool setSoftLimit(short core, short axis, double positive, double negative) = 0;
+    bool setSoftLimit(short core, short axis, double positive, double negative);
 
 signals:
-    // 硬件错误信号 (MainWindow 连接此信号到 AlarmLogger)
     void hardwareError(const QString& source, const QString& message);
-};
-
-#ifndef USE_REAL_GNC
-/**
- * @class MockGncController
- * @brief GNC控制器的模拟实现 — 仅Mock模式编译
- */
-class MockGncController : public IGncController
-{
-    Q_OBJECT
-
-public:
-    explicit MockGncController(QObject *parent = nullptr);
-    ~MockGncController() override;
-
-    // ---- 生命周期 ----
-    bool openCard() override;
-    bool netInit(const QString& xmlFile, int overTimeSec = 120) override;
-    bool loadConfig(short core, const QString& cfgFile) override;
-    bool closeCard() override;
-    bool isConnected() const override;
-
-    // ---- 轴操作 ----
-    bool axisOn(short core, short axis) override;
-    bool axisOff(short core, short axis) override;
-    bool clearStatus(short core, short axis, short count) override;
-    bool zeroPosition(short core, short axis) override;
-
-    // ---- 点位运动 ----
-    bool moveAbsolute(short core, short axis, const TMoveAbsolutePrmEx& prm) override;
-
-    // ---- 回零 ----
-    bool executeHome(short core, short axis, const TStandardHomePrm& prm) override;
-    bool getHomeStatus(short core, short axis, TStandardHomeStatus& sts) override;
-
-    // ---- 状态读取 ----
-    bool getAxisStatus(short core, short axis, long& status, unsigned long& clock) override;
-    bool getProfilePosition(short core, short axis, double& prfPos, unsigned long& clock) override;
-    bool getLimitInfo(short core, short axis, TLimitInfo& info) override;
-
-    // ---- IO操作 ----
-    bool readDI(short core, short diType, short diIndex, short* values, short count) override;
-    bool writeDO(short core, short doType, short doIndex, short* values, short count) override;
-
-    // ---- 软限位 ----
-    bool setSoftLimit(short core, short axis, double positive, double negative) override;
-
-    // ---- Mock专用: 手动控制模拟状态 ----
-    void setDIValue(int diIndex, int value);
-    int  getDIValue(int diIndex) const;
-    void toggleDI(int diIndex);
-
-private slots:
-    void onSimulationTick();
 
 private:
-    bool m_connected;
+    short gtsCall(const char* fnName, short result);
 
-    struct MockAxisState {
-        bool    enabled;
-        double  currentPos;
-        double  targetPos;
-        double  velocity;
-        bool    moving;
-        bool    homing;
-        short   homeStage;
-        TStandardHomePrm homePrm;
-        long    homeCapturePos;
-        bool    homeError;
-    };
-
-    QVector<MockAxisState> m_axes;
-    short m_diValues[20];                       // 19个DI (1-based, 索引0保留)
-    short m_doValues[13];                       // 4个DO (索引9-12, 其余保留)
-
-    QTimer* m_simTimer;
-    int     m_tickCount;
-
-    static const int SIM_TICK_MS = 50;
-    static const int AXIS_COUNT_MOCK = 13;
+    bool    m_connected;
+    QString m_configPath;
+    int     m_errorCount;
 };
-#endif // !USE_REAL_GNC
 
 #endif // GNCCONTROLLER_H

@@ -10,7 +10,7 @@
 #include <QJsonArray>
 #include <QDebug>
 
-MotorManager::MotorManager(IGncController* controller, QObject *parent)
+MotorManager::MotorManager(GncController* controller, QObject *parent)
     : QObject(parent)
     , m_controller(controller)
     , m_polling(false)
@@ -114,9 +114,10 @@ void MotorManager::moveRequest(int axisId, double targetPos, double vel, double 
 void MotorManager::stopMove(int axisId)
 {
     if (axisId < 1 || axisId > AXIS_COUNT) return;
-    m_controller->axisOff(GNC_CORE_NUM, static_cast<short>(axisId));
+    // GT_Stop(平滑停止): 带减速曲线, 不下伺服, 不丢失位置
+    m_controller->stopMove(GNC_CORE_NUM, static_cast<short>(axisId));
     m_axes[axisId - 1].isMoving = false;
-    emit moveFinished(axisId, false);  // 中断
+    emit moveFinished(axisId, false);
 }
 
 void MotorManager::homeRequest(int axisId)
