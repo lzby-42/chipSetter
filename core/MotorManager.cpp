@@ -125,7 +125,7 @@ void MotorManager::homeRequest(int axisId)
 
     TStandardHomePrm prm;
     memset(&prm, 0, sizeof(prm));
-    prm.mode         = 3;       // 正向搜索Home, Index边沿捕获
+    prm.mode         = 10;      // HOME_MODE_LIMIT: 限位回零 (通过限位开关触发)
     prm.highSpeed    = 10.0;    // pulse/ms
     prm.lowSpeed     = 5.0;
     prm.acc          = 1.0;
@@ -304,7 +304,7 @@ void MotorManager::onPollTimer()
         if (ax.isHomed == false) {
             TStandardHomeStatus homeSts;
             m_controller->getHomeStatus(GNC_CORE_NUM, axisId, homeSts);
-            if (homeSts.run == 0 && homeSts.error == 0 && homeSts.stage == 9) {
+            if (homeSts.run == 0 && homeSts.error == 0 && homeSts.stage == 100) { // STANDARD_HOME_STAGE_END
                 ax.isHomed = true;
                 ax.currentPosition = 0.0;
                 emit homeFinished(i + 1, true, homeSts.stage);

@@ -201,37 +201,27 @@ bool GncControllerImpl::moveAbsolute(short core, short axis, const TMoveAbsolute
 bool GncControllerImpl::executeHome(short core, short axis, const TStandardHomePrm& prm)
 {
     Q_UNUSED(core);
-    // 将我们的 TStandardHomePrm 转为 gts.h 的 THomePrm
-    THomePrm home;
-    memset(&home, 0, sizeof(home));
-    home.mode      = prm.mode;
-    home.velHigh   = prm.highSpeed;
-    home.velLow    = prm.lowSpeed;
-    home.acc       = prm.acc;
-    home.dec       = prm.acc;
-    home.homeOffset = static_cast<long>(prm.offset);
-    home.moveDir   = 0;
-    home.edge      = 1;
-
-    short rtn = GT_GoHome(axis, &home);
-    if (gtsCall("GT_GoHome", rtn) != 0) return false;
-    qDebug() << "[GncImpl] executeHome axis=" << axis;
+    // 使用标准回零API GT_ExecuteStandardHome (mode=10=HOME_MODE_LIMIT 限位回零)
+    TStandardHomePrm homePrm = prm;
+    short rtn = GT_ExecuteStandardHome(axis, &homePrm);
+    if (gtsCall("GT_ExecuteStandardHome", rtn) != 0) return false;
+    qDebug() << "[GncImpl] executeHome axis=" << axis << " mode=" << prm.mode;
     return true;
 }
 
 bool GncControllerImpl::getHomeStatus(short core, short axis, TStandardHomeStatus& sts)
 {
     Q_UNUSED(core);
-    THomeStatus gtsSts;
-    memset(&gtsSts, 0, sizeof(gtsSts));
+    TStandardHomeStatus stdSts;
+    memset(&stdSts, 0, sizeof(stdSts));
 
-    if (gtsCall("GT_GetHomeStatus", GT_GetHomeStatus(axis, &gtsSts)) != 0)
+    if (gtsCall("GT_GetStandardHomeStatus", GT_GetStandardHomeStatus(axis, &stdSts)) != 0)
         return false;
 
-    sts.run        = gtsSts.run;
-    sts.stage      = gtsSts.stage;
-    sts.error      = gtsSts.error;
-    sts.capturePos = gtsSts.capturePos;
+    sts.run        = stdSts.run;
+    sts.stage      = stdSts.stage;
+    sts.error      = stdSts.error;
+    sts.capturePos = stdSts.capturePos;
     return true;
 }
 
