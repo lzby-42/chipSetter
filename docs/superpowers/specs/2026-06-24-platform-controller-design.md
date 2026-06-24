@@ -273,6 +273,7 @@ Step ⑤ 拾取:   取晶平台.moveTo(晶圆1)   → 完成 → 拾取臂动作
 | homeLowSpeed | 5 mm/s | 回零低速段 |
 | homeAcc | 200 mm/s² | 回零加速度 |
 | homeOffset | 0 mm | 回零偏移 |
+| homeMode | 限位回零 | 通过限位开关触发，非独立 HOME 传感器 |
 
 ### 取晶平台 (轴10,11)
 
@@ -301,6 +302,7 @@ Step ⑤ 拾取:   取晶平台.moveTo(晶圆1)   → 完成 → 拾取臂动作
 
 ### 已知问题（需同步修复）
 
+- **回零通过限位实现**: 两个平台的轴没有独立 HOME 传感器，限位开关承担双重角色（触发限位=找到零点）。`TStandardHomePrm.mode` 需选择限位回零模式，不能使用 Home 开关模式。
 - **MotorManager `homeFinished` 检测**: 当前使用旧式 `stage==9` 判断回零完成。GncControllerImpl 使用 `GT_GoHome`（旧 API），这是匹配的。但如果将来切换到 `GT_ExecuteStandardHome`（标准 API，stage=100 完成），检测条件需同步更新。
 - **GncControllerImpl 单位换算**: `moveAbsolute` 中 `pos * 1000.0` 可能与 MotorManager `mmToPulse` 产生双重换算，实现前需实测确认。
 
