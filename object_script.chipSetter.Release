@@ -6,6 +6,8 @@ release/IoManager.o
 release/AlarmLogger.o
 release/StatsCollector.o
 release/ProcessManager.o
+release/DispensingPlatformController.o
+release/PickupPlatformController.o
 release/StatusBarWidget.o
 release/MotorPtpWidget.o
 release/MotorParamWidget.o
@@ -26,6 +28,8 @@ release/moc_IoManager.o
 release/moc_AlarmLogger.o
 release/moc_StatsCollector.o
 release/moc_ProcessManager.o
+release/moc_DispensingPlatformController.o
+release/moc_PickupPlatformController.o
 release/moc_StatusBarWidget.o
 release/moc_MotorPtpWidget.o
 release/moc_MotorParamWidget.o

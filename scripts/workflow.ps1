@@ -1,26 +1,26 @@
 # ============================================================
-# chipSetter 整体调度脚本
+# chipSetter Workflow Script
 #
-# 用法:
-#   powershell -File scripts/workflow.ps1 <命令> [选项]
+# Usage:
+#   powershell -File scripts/workflow.ps1 <command> [options]
 #
-# 命令:
-#   build       Mock 模式编译
-#   build-real  Real GNC 模式编译
-#   package     打包 (windeployqt + DLL → debug_deploy)
-#   deploy      部署到 GNC (robocopy)
-#   start       远端启动 (gdbserver + chipSetter)
-#   stop        远端停止 (杀进程 + 删计划任务)
-#   test        实机测试: build-real → package → deploy → start
-#   debug       F5调试: build-real → package → deploy → start (同test)
-#   quick       快速部署: 跳过编译, package → deploy → start
-#   full        全流程: build → package (Mock)
+# Commands:
+#   build       Mock mode build
+#   build-real  Real GNC mode build
+#   package     Package (windeployqt + DLL -> debug_deploy)
+#   deploy      Deploy to GNC (robocopy)
+#   start       Remote start (gdbserver + chipSetter)
+#   stop        Remote stop (kill process + delete scheduled task)
+#   test        Real-machine test: build-real -> package -> deploy -> start
+#   debug       F5 debug: same as test
+#   quick       Quick deploy: skip build, package -> deploy -> start
+#   full        Full flow: build -> package (Mock, no deploy)
 #
-# 选项:
-#   -SkipBuild     跳过编译 (用于 test/debug 命令)
-#   -SkipDeploy    跳过部署 (仅编译+打包)
-#   -TargetIp      目标机IP (默认 192.168.1.2)
-#   -Port          gdbserver 端口 (默认 1234)
+# Options:
+#   -SkipBuild     Skip build step (for test/debug)
+#   -SkipDeploy    Skip deploy step (build+package only)
+#   -TargetIp      Target IP (default 192.168.1.2)
+#   -Port          gdbserver port (default 1234)
 # ============================================================
 param(
     [Parameter(Position=0)]
@@ -35,7 +35,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# ---- 路径配置 ----
+# ---- Paths ----
 $ProjectDir  = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectDir  = Split-Path -Parent $ProjectDir
 $QtPath      = "D:/tool/qt/5.15.2/mingw81_32"
@@ -48,18 +48,19 @@ $ExeName     = "chipSetter.exe"
 $TargetShare = "\\$TargetIp\share\chipSetter"
 $RemotePath  = "C:\Users\googol\Desktop\share\chipSetter"
 
-# ---- 颜色 ----
+# ---- Helpers ----
 function Write-Step($msg) { Write-Host "[$(Get-Date -Format HH:mm:ss)] $msg" -ForegroundColor Cyan }
-function Write-OK($msg)   { Write-Host "  ✅ $msg" -ForegroundColor Green }
-function Write-Err($msg)  { Write-Host "  ❌ $msg" -ForegroundColor Red; throw $msg }
-function Write-Warn($msg) { Write-Host "  ⚠️  $msg" -ForegroundColor Yellow }
+function Write-OK($msg)   { Write-Host "  [OK] $msg" -ForegroundColor Green }
+function Write-Err($msg)  { Write-Host "  [ERR] $msg" -ForegroundColor Red; throw $msg }
+function Write-Warn($msg) { Write-Host "  [WARN] $msg" -ForegroundColor Yellow }
 
 # ============================================================
-# Step 1: 编译
+# Step 1: Build
 # ============================================================
 function Invoke-Build {
     param([bool]$RealGnc = $false)
-    Write-Step "编译 $(if($RealGnc){'Real GNC'}else{'Mock'}) 模式..."
+    $mode = if ($RealGnc) { "Real GNC" } else { "Mock" }
+    Write-Step "Building ($mode mode)..."
 
     $qmakeArgs = "chipSetter.pro", "CONFIG+=debug", "CONFIG+=console"
     if ($RealGnc) { $qmakeArgs += "CONFIG+=real_gnc" }
@@ -81,55 +82,55 @@ function Invoke-Build {
         }
 
     if ($proc.ExitCode -ne 0) {
-        Write-Err "编译失败 (exit=$($proc.ExitCode))"
+        Write-Err "Build failed (exit=$($proc.ExitCode))"
     }
 
     $exe = "$DebugDir/$ExeName"
     if (-not (Test-Path $exe)) {
-        Write-Err "编译产物缺失: $exe"
+        Write-Err "Build output missing: $exe"
     }
     $size = [math]::Round((Get-Item $exe).Length / 1MB, 1)
-    Write-OK "编译完成 ($size MB)"
+    Write-OK "Build complete ($size MB)"
 }
 
 # ============================================================
-# Step 2: 打包
+# Step 2: Package
 # ============================================================
 function Invoke-Package {
-    Write-Step "打包 → debug_deploy/..."
+    Write-Step "Packaging -> debug_deploy/..."
 
     & powershell.exe -NoProfile -ExecutionPolicy Bypass `
         -File "$VscodeDir/package_debug.ps1" 2>&1 | Out-Null
 
     if ($LASTEXITCODE -ne 0) {
-        Write-Err "打包失败 (exit=$LASTEXITCODE)"
+        Write-Err "Package failed (exit=$LASTEXITCODE)"
     }
 
     $count = (Get-ChildItem -Recurse $DeployDir -File).Count
     $size  = [math]::Round((Get-ChildItem -Recurse $DeployDir | Measure-Object -Property Length -Sum).Sum / 1MB, 1)
-    Write-OK "打包完成 ($count 文件, $size MB)"
+    Write-OK "Package complete ($count files, $size MB)"
 }
 
 # ============================================================
-# Step 3: 部署
+# Step 3: Deploy
 # ============================================================
 function Invoke-Deploy {
-    Write-Step "部署 → $TargetShare..."
+    Write-Step "Deploying -> $TargetShare..."
 
     & powershell.exe -NoProfile -ExecutionPolicy Bypass `
         -File "$VscodeDir/deploy_to_target.ps1" 2>&1 | Select-Object -Last 5
 
     if ($LASTEXITCODE -ge 8) {
-        Write-Err "部署失败 (robocopy exit=$LASTEXITCODE)"
+        Write-Err "Deploy failed (robocopy exit=$LASTEXITCODE)"
     }
-    Write-OK "部署完成 → GNC $RemotePath"
+    Write-OK "Deploy complete -> GNC $RemotePath"
 }
 
 # ============================================================
-# Step 4: 远端启动
+# Step 4: Remote Start
 # ============================================================
 function Invoke-StartRemote {
-    Write-Step "远端启动 (gdbserver → chipSetter)..."
+    Write-Step "Remote start (gdbserver -> chipSetter)..."
 
     $result = & powershell.exe -NoProfile -ExecutionPolicy Bypass `
         -File "$VscodeDir/start_gdbserver.ps1" `
@@ -138,36 +139,36 @@ function Invoke-StartRemote {
     $resultString = $result -join "`n"
 
     if ($resultString -match "gdbserver listening") {
-        Write-OK "gdbserver 监听 ${TargetIp}:$Port"
-        Write-OK "chipSetter.exe 已拉起, 请查看 GNC 桌面"
+        Write-OK "gdbserver listening on ${TargetIp}:$Port"
+        Write-OK "chipSetter.exe launched, check GNC desktop"
     } elseif ($resultString -match "Cannot auto-start") {
-        Write-Warn "自动启动失败, 请手动在 GNC 上运行:"
+        Write-Warn "Auto-start failed, run manually on GNC:"
         Write-Host "    cd C:\Users\googol\Desktop\share\chipSetter" -ForegroundColor Cyan
         Write-Host "    gdbserver.exe --once 0.0.0.0:$Port chipSetter.exe" -ForegroundColor Cyan
     } else {
-        Write-Warn "未知状态, 输出:"
+        Write-Warn "Unknown status, output:"
         Write-Host $resultString
     }
 }
 
 # ============================================================
-# Step 5: 远端停止
+# Step 5: Remote Stop
 # ============================================================
 function Invoke-StopRemote {
-    Write-Step "远端停止..."
+    Write-Step "Remote stop..."
 
     & powershell.exe -NoProfile -ExecutionPolicy Bypass `
         -File "$VscodeDir/stop_gdbserver.ps1" 2>&1 | Select-Object -Last 3
 
-    Write-OK "远端进程已停止"
+    Write-OK "Remote processes stopped"
 }
 
 # ============================================================
-# 命令路由
+# Command Router
 # ============================================================
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "  chipSetter Workflow — $Command"        -ForegroundColor Cyan
+Write-Host "  chipSetter Workflow -- $Command"        -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -214,7 +215,6 @@ switch ($Command) {
     }
 
     "quick" {
-        # 跳过编译, 直接打包→部署→启动
         Invoke-Package
         if (-not $SkipDeploy) { Invoke-Deploy }
         Invoke-StartRemote
@@ -223,11 +223,11 @@ switch ($Command) {
     "full" {
         if (-not $SkipBuild) { Invoke-Build -RealGnc $false }
         Invoke-Package
-        Write-OK "Mock 全流程完成 (无部署)"
+        Write-OK "Mock full flow complete (no deploy)"
     }
 
     default {
-        Write-Err "未知命令: $Command"
+        Write-Err "Unknown command: $Command"
     }
 }
 
@@ -235,5 +235,5 @@ $totalEnd = Get-Date
 $elapsed = [math]::Round(($totalEnd - $totalStart).TotalSeconds, 1)
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "  完成 ($elapsed 秒)"                    -ForegroundColor Green
+Write-Host "  Done ($elapsed sec)"                         -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Cyan

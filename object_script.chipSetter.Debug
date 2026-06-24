@@ -6,6 +6,8 @@ debug/IoManager.o
 debug/AlarmLogger.o
 debug/StatsCollector.o
 debug/ProcessManager.o
+debug/DispensingPlatformController.o
+debug/PickupPlatformController.o
 debug/StatusBarWidget.o
 debug/MotorPtpWidget.o
 debug/MotorParamWidget.o
@@ -26,6 +28,8 @@ debug/moc_IoManager.o
 debug/moc_AlarmLogger.o
 debug/moc_StatsCollector.o
 debug/moc_ProcessManager.o
+debug/moc_DispensingPlatformController.o
+debug/moc_PickupPlatformController.o
 debug/moc_StatusBarWidget.o
 debug/moc_MotorPtpWidget.o
 debug/moc_MotorParamWidget.o
