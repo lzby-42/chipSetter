@@ -127,10 +127,12 @@ function Invoke-Deploy {
 }
 
 # ============================================================
-# Step 4: Remote Start
+# Step 4a: Remote Start (WITH gdbserver — for F5 debugging)
+# gdbserver suspends the process until gdb connects and sends "continue".
+# Without gdb, the process stays frozen — MainWindowHandle=0, no GUI!
 # ============================================================
 function Invoke-StartRemote {
-    Write-Step "Remote start (gdbserver -> chipSetter)..."
+    Write-Step "Remote start (gdbserver -> chipSetter) for debugging..."
 
     $result = & powershell.exe -NoProfile -ExecutionPolicy Bypass `
         -File "$VscodeDir/start_gdbserver.ps1" `
@@ -140,13 +142,36 @@ function Invoke-StartRemote {
 
     if ($resultString -match "gdbserver listening") {
         Write-OK "gdbserver listening on ${TargetIp}:$Port"
-        Write-OK "chipSetter.exe launched, check GNC desktop"
+        Write-OK "chipSetter.exe waiting for gdb... (F5 to connect)"
     } elseif ($resultString -match "Cannot auto-start") {
         Write-Warn "Auto-start failed, run manually on GNC:"
         Write-Host "    cd C:\Users\googol\Desktop\share\chipSetter" -ForegroundColor Cyan
         Write-Host "    gdbserver.exe --once 0.0.0.0:$Port chipSetter.exe" -ForegroundColor Cyan
     } else {
         Write-Warn "Unknown status, output:"
+        Write-Host $resultString
+    }
+}
+
+# ============================================================
+# Step 4b: Remote Start DIRECT (no gdbserver — for real-machine testing)
+# ============================================================
+function Invoke-StartDirect {
+    Write-Step "Remote start DIRECT (no gdbserver — for testing)..."
+
+    $result = & powershell.exe -NoProfile -ExecutionPolicy Bypass `
+        -File "$VscodeDir/start_direct.ps1" `
+        -TargetIp $TargetIp 2>&1
+
+    $resultString = $result -join "`n"
+
+    if ($resultString -match "Window visible") {
+        Write-OK "chipSetter.exe running with GUI — check GNC desktop"
+    } elseif ($resultString -match "No window handle") {
+        Write-Warn "Process running but no GUI — is user logged into GNC?"
+    } elseif ($resultString -match "did not start") {
+        Write-Err "Launch failed. Check GNC manually."
+    } else {
         Write-Host $resultString
     }
 }
@@ -193,6 +218,10 @@ switch ($Command) {
     }
 
     "start" {
+        Invoke-StartDirect
+    }
+
+    "start-debug" {
         Invoke-StartRemote
     }
 
@@ -204,7 +233,7 @@ switch ($Command) {
         if (-not $SkipBuild) { Invoke-Build -RealGnc $true }
         Invoke-Package
         if (-not $SkipDeploy) { Invoke-Deploy }
-        Invoke-StartRemote
+        Invoke-StartDirect
     }
 
     "debug" {
@@ -217,7 +246,7 @@ switch ($Command) {
     "quick" {
         Invoke-Package
         if (-not $SkipDeploy) { Invoke-Deploy }
-        Invoke-StartRemote
+        Invoke-StartDirect
     }
 
     "full" {

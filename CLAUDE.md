@@ -453,6 +453,14 @@ WinRM → Invoke-Command:
 GNC 用户: `googol`, 需在 `Remote Management Users` 组
 防火墙: TCP 1234 + 5985-5986 已放行
 
+#### gdbserver 挂起陷阱
+
+**问题**: gdbserver 启动目标进程后会将其**挂起**，等待 gdb 连接后发送 `continue`。如果不连 gdb，进程永远停在入口点——`MainWindowHandle=0`，看不到 GUI。
+
+**区分**:
+- **F5 调试**: 用 `start_gdbserver.ps1` → gdbserver 挂起进程 → gdb 连接 → continue → 窗口出现 ✅
+- **实机测试**: 用 `start_direct.ps1` → 直接启动 chipSetter.exe → 无需 gdb → 窗口立即可见 ✅
+
 #### Session 0 陷阱
 
 **问题**: `schtasks /create /it` + `schtasks /run` 会把进程丢到 Session 0（无 GUI），即使有用户登录。
