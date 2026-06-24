@@ -21,6 +21,8 @@
 #include "core/AlarmLogger.h"
 #include "core/StatsCollector.h"
 #include "core/ProcessManager.h"
+#include "core/DispensingPlatformController.h"
+#include "core/PickupPlatformController.h"
 
 // Widgets (调试模式)
 #include "widgets/StatusBarWidget.h"
@@ -59,6 +61,8 @@ private:
     AlarmLogger*        m_alarmLogger;
     StatsCollector*     m_statsCollector;
     ProcessManager*     m_processManager;
+    DispensingPlatformController* m_dispensingPlatform;
+    PickupPlatformController*     m_pickupPlatform;
 
     // Layout
     QStackedWidget*     m_stack;
