@@ -13,6 +13,9 @@
 
 // Core
 #include "core/GncController.h"
+#ifdef USE_REAL_GNC
+#include "core/GncControllerImpl.h"
+#endif
 #include "core/MotorManager.h"
 #include "core/IoManager.h"
 #include "core/AlarmLogger.h"
@@ -50,7 +53,7 @@ private:
     void switchToDebugMode();
 
     // Core
-    MockGncController*  m_gncController;
+    IGncController*     m_gncController;    // MockGncController 或 GncControllerImpl
     MotorManager*       m_motorManager;
     IoManager*          m_ioManager;
     AlarmLogger*        m_alarmLogger;

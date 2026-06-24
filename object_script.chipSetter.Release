@@ -1,6 +1,6 @@
 release/main.o
 release/mainwindow.o
-release/GncController.o
+release/GncControllerImpl.o
 release/MotorManager.o
 release/IoManager.o
 release/AlarmLogger.o
@@ -20,6 +20,7 @@ release/DeviceStatusWidget.o
 release/qrc_resources.o
 release/moc_mainwindow.o
 release/moc_GncController.o
+release/moc_GncControllerImpl.o
 release/moc_MotorManager.o
 release/moc_IoManager.o
 release/moc_AlarmLogger.o

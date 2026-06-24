@@ -51,11 +51,46 @@ function Start-ViaWinRM {
             Get-Process -Name "chipSetter" -ErrorAction SilentlyContinue | Stop-Process -Force
             Get-Process -Name "gdbserver" -ErrorAction SilentlyContinue | Stop-Process -Force
             Start-Sleep -Seconds 1
+
             $taskName = "chipSetter-gdbserver"
+            $dir = Split-Path $exe -Parent
+
+            # Write a batch file to the remote machine
+            $batchPath = "$env:TEMP\chipsetter_gdb.bat"
+            @"
+@echo off
+set "PATH=$dir;%PATH%"
+cd /d "$dir"
+gdbserver.exe --once 0.0.0.0:$port chipSetter.exe 1> "%TEMP%\gdb_stdout.txt" 2> "%TEMP%\gdb_stderr.txt"
+"@ | Out-File -Encoding ASCII -FilePath $batchPath
+
+            # Debug: show batch content
+            Write-Host "Batch: $batchPath"
+            Get-Content $batchPath | ForEach-Object { Write-Host "  $_" }
+
+            $startTime = (Get-Date).AddMinutes(1).ToString("HH:mm")
             schtasks /delete /tn $taskName /f 2>$null
-            schtasks /create /tn $taskName /tr "`"$gdbserver`" --once 0.0.0.0:$port `"$exe`"" /sc once /st 00:00 /it /f
-            $result = schtasks /run /tn $taskName 2>&1
-            Write-Host "gdbserver scheduled task started: $result"
+            $createOut = schtasks /create /tn $taskName /tr "cmd /c `"$batchPath`"" /sc once /st $startTime /it /f 2>&1
+            Write-Host "SchTasks Create: $createOut"
+            $runOut = schtasks /run /tn $taskName 2>&1
+            Write-Host "SchTasks Run: $runOut"
+            Start-Sleep -Seconds 5
+
+            # Check log files for error messages
+            @("$env:TEMP\gdb_stdout.txt", "$env:TEMP\gdb_stderr.txt") | ForEach-Object {
+                if (Test-Path $_) {
+                    Write-Host "$(Split-Path $_ -Leaf):"
+                    $content = Get-Content $_ -Raw
+                    if ($content) { Write-Host $content } else { Write-Host "  (empty)" }
+                }
+            }
+
+            $portCheck = (netstat -ano | Select-String "0.0.0.0:$port.*LISTENING")
+            if ($portCheck) {
+                Write-Host "[OK] gdbserver listening on $port" -ForegroundColor Green
+            } else {
+                Write-Host "[WARN] Port $port not listening" -ForegroundColor Yellow
+            }
         } -ArgumentList $RemoteExePath, $RemoteGdbServerPath, $Port -ErrorAction Stop
         Write-Host "[OK] gdbserver started via WinRM" -ForegroundColor Green
         Remove-PSSession $session

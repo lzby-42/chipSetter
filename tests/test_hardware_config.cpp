@@ -17,7 +17,7 @@ private slots:
 };
 
 void TestHardwareConfig::testAxisCount() { QCOMPARE(AXIS_COUNT, 13); }
-void TestHardwareConfig::testDiCount() { QCOMPARE(DI_COUNT, 16); }
+void TestHardwareConfig::testDiCount() { QCOMPARE(DI_COUNT, 19); }
 void TestHardwareConfig::testDoCount() { QCOMPARE(DO_COUNT, 4); }
 
 void TestHardwareConfig::testAxisNamesCount() {
@@ -38,19 +38,19 @@ void TestHardwareConfig::testDoNamesCount() {
 void TestHardwareConfig::testAxisIdsDistinct() {
     // Verify all axis IDs are distinct
     QSet<int> ids;
-    ids << AXIS_WAFER_X << AXIS_WAFER_Y << AXIS_DISPENSE_X << AXIS_DISPENSE_Y
-        << AXIS_EJECTOR_Z1 << AXIS_EJECTOR_Z2 << AXIS_ROTARY_WHEEL
-        << AXIS_RESERVED_8 << AXIS_RESERVED_9 << AXIS_RESERVED_10
-        << AXIS_RESERVED_11 << AXIS_RESERVED_12 << AXIS_RESERVED_13;
+    ids << AXIS_JIAO_PAN << AXIS_DISPENSE_X << AXIS_DISPENSE_Y
+        << AXIS_PICKUP_ARM_ROT << AXIS_DISPENSE_ARM_ROT << AXIS_DISPENSE_ARM_UD
+        << AXIS_PICKUP_ARM_UD << AXIS_EJECTOR_UP << AXIS_EJECTOR_DOWN
+        << AXIS_PICKUP_X << AXIS_PICKUP_Y << AXIS_PICKUP_W << AXIS_GRIPPER;
     QCOMPARE(ids.size(), 13);
 }
 
 void TestHardwareConfig::testAxisIdsInRange() {
     int ids[] = {
-        AXIS_WAFER_X, AXIS_WAFER_Y, AXIS_DISPENSE_X, AXIS_DISPENSE_Y,
-        AXIS_EJECTOR_Z1, AXIS_EJECTOR_Z2, AXIS_ROTARY_WHEEL,
-        AXIS_RESERVED_8, AXIS_RESERVED_9, AXIS_RESERVED_10,
-        AXIS_RESERVED_11, AXIS_RESERVED_12, AXIS_RESERVED_13
+        AXIS_JIAO_PAN, AXIS_DISPENSE_X, AXIS_DISPENSE_Y,
+        AXIS_PICKUP_ARM_ROT, AXIS_DISPENSE_ARM_ROT, AXIS_DISPENSE_ARM_UD,
+        AXIS_PICKUP_ARM_UD, AXIS_EJECTOR_UP, AXIS_EJECTOR_DOWN,
+        AXIS_PICKUP_X, AXIS_PICKUP_Y, AXIS_PICKUP_W, AXIS_GRIPPER
     };
     for (int id : ids) {
         QVERIFY(id >= 1 && id <= AXIS_COUNT);

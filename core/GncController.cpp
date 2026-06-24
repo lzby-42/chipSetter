@@ -4,6 +4,7 @@
  */
 
 #include "GncController.h"
+#include "HardwareConfig.h"
 #include <QDebug>
 #include <cstring>
 
@@ -30,17 +31,16 @@ MockGncController::MockGncController(QObject *parent)
         ax.homeError   = false;
     }
 
-    // 初始化DI (1~16)
+    // 初始化DI (1~19, 对应GPI1-GPI19 / X0-X18)
     memset(m_diValues, 0, sizeof(m_diValues));
-    // 模拟: Home传感器默认触发, 限位不触发, 急停不触发
-    m_diValues[1]  = 1;   // 晶盘X_Home
-    m_diValues[2]  = 1;   // 晶盘Y_Home
-    m_diValues[7]  = 1;   // 点胶X_Home
-    m_diValues[13] = 1;   // Z顶针1_Home
-    m_diValues[15] = 1;   // 转轮_Home
-    // 其余为0
+    // 模拟: Home传感器默认触发(高电平), 限位不触发(低电平)
+    m_diValues[3]  = 1;   // GPI3  X2  点胶平台X_Home
+    m_diValues[6]  = 1;   // GPI6  X5  点胶平台Y_Home
+    m_diValues[9]  = 1;   // GPI9  X8  取晶X_Home
+    m_diValues[15] = 1;   // GPI15 X14 吸嘴Home
+    // 其余为0 (限位不触发 = 正常状态)
 
-    // 初始化DO (1~4), 默认全低
+    // 初始化DO (索引9-12对应Y9-Y12), 默认全低
     memset(m_doValues, 0, sizeof(m_doValues));
 
     // 启动模拟定时器
@@ -61,8 +61,13 @@ MockGncController::~MockGncController()
 
 bool MockGncController::openCard()
 {
-    qDebug() << "[MockGnc] openCard() — 模拟开卡成功";
+    qDebug() << "[MockGnc] openCard() — 模拟开卡成功, m_connected=true";
     m_connected = true;
+    qDebug() << "[MockGnc] DI初始化状态: DI[3]=" << m_diValues[3]
+             << " DI[6]=" << m_diValues[6]
+             << " DI[9]=" << m_diValues[9]
+             << " DI[15]=" << m_diValues[15]
+             << " (Home传感器=1, 其余=" << m_diValues[1] << ")";
     return true;
 }
 
@@ -243,12 +248,20 @@ bool MockGncController::readDI(short core, short diType, short diIndex, short* v
 {
     Q_UNUSED(core);
     Q_UNUSED(diType);
+    static int callCount = 0;
+    callCount++;
     for (short i = 0; i < count; ++i) {
         int idx = diIndex + i;
-        if (idx >= 1 && idx <= 16)
+        if (idx >= 1 && idx <= DI_COUNT)
             values[i] = m_diValues[idx];
         else
             values[i] = 0;
+    }
+    if (callCount <= 3) {
+        QString valStr;
+        for (short i = 0; i < count; ++i) valStr += QString::number(values[i]);
+        qDebug() << "[MockGnc] readDI #" << callCount << " diType=" << diType
+                 << " count=" << count << " values=[" << valStr << "]";
     }
     return true;
 }
@@ -259,7 +272,7 @@ bool MockGncController::writeDO(short core, short doType, short doIndex, short* 
     Q_UNUSED(doType);
     for (short i = 0; i < count; ++i) {
         int idx = doIndex + i;
-        if (idx >= 1 && idx <= 4)
+        if (idx >= DO_INDEX_BASE && idx < DO_INDEX_BASE + DO_COUNT)
             m_doValues[idx] = values[i];
     }
     return true;
@@ -284,20 +297,20 @@ bool MockGncController::setSoftLimit(short core, short axis, double positive, do
 
 void MockGncController::setDIValue(int diIndex, int value)
 {
-    if (diIndex >= 1 && diIndex <= 16)
+    if (diIndex >= 1 && diIndex <= DI_COUNT)
         m_diValues[diIndex] = static_cast<short>(value);
 }
 
 int MockGncController::getDIValue(int diIndex) const
 {
-    if (diIndex >= 1 && diIndex <= 16)
+    if (diIndex >= 1 && diIndex <= DI_COUNT)
         return m_diValues[diIndex];
     return 0;
 }
 
 void MockGncController::toggleDI(int diIndex)
 {
-    if (diIndex >= 1 && diIndex <= 16)
+    if (diIndex >= 1 && diIndex <= DI_COUNT)
         m_diValues[diIndex] = m_diValues[diIndex] ? 0 : 1;
 }
 

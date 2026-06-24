@@ -165,6 +165,8 @@ schtasks /run /tn "chipSetter-gdbserver"
 
 **前提**: GNC 必须有人登录（RDP 或本地），否则无交互式会话。
 
+> **关键细节**: schtasks 的 `/st` 时间不能早于当前时间，否则会触发警告。脚本中动态计算 `(Get-Date).AddMinutes(1).ToString("HH:mm")` 来解决。
+
 ---
 
 ### 11. 停止调试时远程进程不退出
@@ -177,6 +179,89 @@ b) launch.json 加 `postDebugTask` — VS Code 停止调试后自动远端杀进
 
 ```json
 "postDebugTask": "远端结束 gdbserver"
+```
+
+---
+
+### 12. SMB 共享认证失败（错误 1326）
+
+**现象**: robocopy 报 `错误 1326 (0x0000052E) 用户名或密码不正确`
+
+**原因**: 资源管理器能打开 SMB 共享（GUI 缓存了凭证），但命令行 robocopy 跑在 VS Code 任务进程里，凭证上下文不同。
+
+**解决**: 部署脚本 (`deploy_to_target.ps1`) 在 robocopy 前先用 `net use` 建立 SMB 连接:
+```powershell
+$cred = Import-Clixml "$env:USERPROFILE\.chipsetter_cred.xml"
+$password = $cred.GetNetworkCredential().Password
+net use "\\$TargetIp\share" /user:$RemoteUser $password /persistent:no 2>$null
+```
+
+或手动一次性:
+```cmd
+net use \\192.168.1.2\share /user:googol * /persistent:yes
+```
+
+---
+
+### 13. 部署遗漏 DLL（Qt + googol/gts）
+
+**现象**: GNC 上 chipSetter.exe 闪退，报告 `Qt5Core.dll`, `Qt5Gui.dll`, `gts.dll` 找不到
+
+**原因**: 打包脚本 `package_debug.ps1` 只复制了 MinGW runtime DLL，遗漏了:
+- Qt DLL（Qt5Core/Gui/Widgets 等）
+- Qt 平台插件 (`platforms/qwindows.dll`)
+- googol GTS 运动控制库 (`gts.dll`, `gts.lib`)
+
+**解决**: 打包脚本加入三个步骤:
+1. **windeployqt** — 自动收集 Qt DLL 和平台插件
+2. **googol/** 目录复制 — GTS 运动控制库
+3. 部署脚本加 **`/E`** 标志 — robocopy 递归复制子目录（`platforms/`）
+
+相关文件: `.vscode/package_debug.ps1`, `.vscode/deploy_to_target.ps1`
+
+---
+
+### 14. MSYS2 登录 shell 覆盖 MSYSTEM → 64 位编译
+
+**现象**: 改代码后 F5，debug exe **从未更新**，始终显示旧 UI
+
+**排查过程**:
+1. 确认 `make` 手动跑能重新编译 → 编译命令本身没问题
+2. 确认文件时间戳正确、依赖规则存在 → make 应该检测到改动
+3. 检查 VS Code 任务的 bash 命令 → `bash -lc "export MSYSTEM=MINGW32 && ..."`
+4. **关键发现**: 不带环境变量跑 `bash -lc 'echo $MSYSTEM'` 输出 `MINGW64`
+
+**根因**: `bash -lc` 是 MSYS2 登录 shell。`/etc/profile` 先于 `-c` 命令执行，将 `MSYSTEM` 设为 `MINGW64`。命令里的 `export MSYSTEM=MINGW32` 虽然也执行了，但 PATH 中 `/mingw64/bin` 已经在前面 → g++ 实际用的是 **64 位版本** → 链接 Qt 32 位库时产生 `undefined reference` / `file format not recognized` 错误 → VS Code 问题匹配器只匹配 `file:line: error:` 格式，链接器错误格式不同 → **静默失败** → 旧 exe 没被替换。
+
+**解决**: 在 VS Code task 的 `env` 块中**预设** `MSYSTEM=MINGW32`，让 bash 启动前环境变量就是正确的，登录脚本检测到已有值就不会覆盖:
+
+```json
+"options": {
+    "cwd": "${workspaceFolder}",
+    "env": {
+        "MSYSTEM": "MINGW32"
+    }
+}
+```
+
+> 关键原则: MSYS2 登录 shell 的环境变量要在启动时传入，不能在 `-c` 命令里 `export`（已经晚了）。
+
+---
+
+### 15. 每次 F5 跑 qmake 破坏增量编译
+
+**现象**: 即使 MSYSTEM 正确，代码改动后 make 也不重编
+
+**原因**: F5 的任务链每次都先跑 `qmake` 重新生成 `Makefile.Debug`。qmake 更新 Makefile 的时间戳后，make 的依赖追踪状态被重置。
+
+**解决**: 将 qmake 从自动构建链中移除。日常 F5 只跑 `make`（增量编译）。只有以下情况才手动运行 `qmake Debug`:
+- 新增了 `.cpp` / `.h` 文件
+- 修改了 `.pro` 工程文件
+- 新增了 Qt 信号/槽（需要重新 moc）
+
+```json
+// 编译 Debug 版本：只依赖 make，不依赖 qmake
+"dependsOn": ["make Debug (MSYS2)"]
 ```
 
 ---
@@ -201,6 +286,7 @@ b) launch.json 加 `postDebugTask` — VS Code 停止调试后自动远端杀进
         { "text": "-gdb-set disassembly-flavor intel", "ignoreFailures": true },
         { "text": "set auto-solib-add off", "ignoreFailures": true }
     ],
+    // 不要 sourceFileMap！debug info 已经是 Windows 路径
     "preLaunchTask": "编译并部署 Debug 到目标机",
     "postDebugTask": "远端结束 gdbserver"
 }
@@ -210,23 +296,25 @@ b) launch.json 加 `postDebugTask` — VS Code 停止调试后自动远端杀进
 
 ```
 F5 → preLaunchTask: "编译并部署 Debug 到目标机"
-       ├─ qmake Debug
-       ├─ make Debug (MSYS2)
-       ├─ 打包 Debug 部署包       (package_debug.ps1)
-       ├─ 部署到目标机             (deploy_to_target.ps1)
-       └─ 远端启动 gdbserver       (start_gdbserver.ps1 -> WinRM -> schtasks /it)
+       ├─ 远端结束 gdbserver    (stop_gdbserver.ps1 → WinRM 杀旧进程)
+       ├─ make Debug (MSYS2)     (bash + MSYSTEM=MINGW32 env → 增量编译)
+       ├─ 打包 Debug 部署包      (package_debug.ps1: exe+windeployqt+googol+gdbserver+DLL)
+       ├─ 部署到目标机            (deploy_to_target.ps1: net use + robocopy /E)
+       └─ 远端启动 gdbserver      (start_gdbserver.ps1 → WinRM → schtasks /it)
   → gdb 连接调试
   → Shift+F5
-  → postDebugTask: "远端结束 gdbserver" (stop_gdbserver.ps1 -> WinRM)
+  → postDebugTask: "远端结束 gdbserver" (stop_gdbserver.ps1 → WinRM)
 ```
+
+> **qmake 不自动跑**。新增文件或改 .pro 后手动 Ctrl+Shift+P → Tasks: Run Task → qmake Debug。
 
 ### 脚本文件
 
 | 文件 | 用途 |
 |------|------|
-| `.vscode/deploy_to_target.ps1` | robocopy 部署，正确处理退出码 |
-| `.vscode/package_debug.ps1` | 打包 debug exe + gdbserver + MinGW DLL |
-| `.vscode/start_gdbserver.ps1` | WinRM + schtasks 远端启动 gdbserver |
+| `.vscode/deploy_to_target.ps1` | net use SMB + robocopy /E 部署 |
+| `.vscode/package_debug.ps1` | windeployqt + googol + MinGW DLL + gdbserver 打包 |
+| `.vscode/start_gdbserver.ps1` | WinRM → schtasks /it 远端启动 gdbserver |
 | `.vscode/stop_gdbserver.ps1` | WinRM 远端杀 gdbserver + chipSetter |
 
 ### GNC 目标机检查清单
@@ -236,3 +324,17 @@ F5 → preLaunchTask: "编译并部署 Debug 到目标机"
 - [ ] gdbserver 使用 `0.0.0.0:1234`（不是 `:1234`）
 - [ ] gdbserver 带 `--once` 参数
 - [ ] 开发机已保存 WinRM 凭证 (`~\.chipsetter_cred.xml`)
+- [ ] GNC 上有完整 DLL: Qt5*.dll, gts.dll, MinGW runtime, platforms/qwindows.dll
+
+### 开发机检查清单
+
+- [ ] VS Code task 中 `MSYSTEM=MINGW32` 写在 `env` 块（不是 bash 命令里）
+- [ ] 日常改代码直接 F5（增量编译），不加新文件不跑 qmake
+- [ ] `sourceFileMap` 已删除（debug info 是 Windows 路径时不需要）
+
+### gdbserver 启动参考命令
+
+```cmd
+cd C:\Users\googol\Desktop\share\chipSetter
+gdbserver.exe --once 0.0.0.0:1234 chipSetter.exe
+```

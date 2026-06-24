@@ -29,10 +29,13 @@
             "command": "D:/Code_Languages/C/msys64/usr/bin/bash.exe",
             "args": [
                 "-lc",
-                "export MSYSTEM=MINGW32 && export PATH=/d/tool/qt/5.15.2/mingw81_32/bin:/mingw32/bin:$PATH && cd '${workspaceFolder}' && make -f Makefile.Debug -j4"
+                "export PATH=/d/tool/qt/5.15.2/mingw81_32/bin:/mingw32/bin:$PATH && cd '${workspaceFolder}' && make -f Makefile.Debug -j4"
             ],
             "options": {
-                "cwd": "${workspaceFolder}"
+                "cwd": "${workspaceFolder}",
+                "env": {
+                    "MSYSTEM": "MINGW32"
+                }
             },
             "problemMatcher": {
                 "owner": "cpp",
@@ -135,7 +138,6 @@
             "label": "编译 Debug 版本",
             "dependsOrder": "sequence",
             "dependsOn": [
-                "qmake Debug",
                 "make Debug (MSYS2)"
             ],
             "group": {

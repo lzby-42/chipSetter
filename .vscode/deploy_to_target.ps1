@@ -23,7 +23,7 @@ if (Test-Path $credFile) {
 }
 
 # ---- Run robocopy ----
-robocopy $SourceDir $TargetShare *.* /R:3 /W:5 /NP
+robocopy $SourceDir $TargetShare *.* /E /R:3 /W:5 /NP
 
 if ($LASTEXITCODE -ge 8) {
     Write-Host "[ERROR] robocopy failed with code: $LASTEXITCODE" -ForegroundColor Red

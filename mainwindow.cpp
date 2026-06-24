@@ -33,7 +33,11 @@ MainWindow::~MainWindow() {}
 
 void MainWindow::createCoreModules()
 {
+#ifdef USE_REAL_GNC
+    m_gncController  = new GncControllerImpl(this);
+#else
     m_gncController  = new MockGncController(this);
+#endif
     m_motorManager   = new MotorManager(m_gncController, this);
     m_ioManager      = new IoManager(m_gncController, this);
     m_alarmLogger    = new AlarmLogger(this);
@@ -286,6 +290,12 @@ void MainWindow::connectSignals()
                 }
             });
 
+    // ===== GTS 硬件错误 → 报警栏 =====
+    connect(m_gncController, &IGncController::hardwareError,
+            this, [this](const QString& source, const QString& message) {
+                m_alarmLogger->raiseAlarm(ALARM_LEVEL_WARNING, source, message);
+            });
+
     // ===== 报警 =====
     connect(m_alarmLogger, &AlarmLogger::newAlarm,
             m_alarmList, &AlarmListWidget::onNewAlarm);
@@ -412,10 +422,25 @@ void MainWindow::switchToDebugMode()
 
 void MainWindow::initSystem()
 {
+#ifdef USE_REAL_GNC
+    // 真实硬件: 使用 googol/core1_20261212.cfg
+    qDebug() << "[MainWindow] 初始化真实GTS硬件...";
+    bool cardOk = m_gncController->openCard();
+    if (cardOk) {
+        m_gncController->netInit("", 120);
+        m_gncController->loadConfig(GNC_CORE_NUM, "googol/core1_20261212.cfg");
+        m_gncController->clearStatus(GNC_CORE_NUM, GNC_AXIS_START, AXIS_COUNT);
+    } else {
+        qCritical() << "[MainWindow] 开卡失败! 请检查硬件连接和驱动";
+    }
+#else
+    // Mock模拟: 使用假配置
+    qDebug() << "[MainWindow] 初始化Mock模拟模式...";
     m_gncController->openCard();
     m_gncController->netInit("config.xml", 120);
     m_gncController->loadConfig(GNC_CORE_NUM, "config.cfg");
     m_gncController->clearStatus(GNC_CORE_NUM, GNC_AXIS_START, AXIS_COUNT);
+#endif
 
     m_bottomBar->setConnectionStatus(m_gncController->isConnected());
     m_production->setConnectionStatus(m_gncController->isConnected());

@@ -1,5 +1,6 @@
 #include <QApplication>
 #include <QFile>
+#include <QFileInfo>
 #include <QDebug>
 #include <QDateTime>
 #include <QMutex>
@@ -38,11 +39,21 @@ static void fileLogHandler(QtMsgType type, const QMessageLogContext& ctx, const 
 int main(int argc, char *argv[])
 {
     // ---- file logging (must be first, before QApplication) ----
+    // 日志写入当前目录 chipsetter_debug.log (同时输出到控制台)
     g_logFile.setFileName("chipsetter_debug.log");
     if (g_logFile.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
         qInstallMessageHandler(fileLogHandler);
-        qDebug() << "=== chipSetter V1.0 started ===";
     }
+    // 确保关键信息也输出到stderr (gdbserver/控制台可见)
+    QFileInfo logInfo(g_logFile.fileName());
+    QString logAbsPath = logInfo.absoluteFilePath();
+    qDebug() << "=== chipSetter V1.0 ===";
+    qDebug() << "日志文件:" << logAbsPath;
+#ifdef USE_REAL_GNC
+    qDebug() << "构建模式: 真实硬件 (GTS SDK)";
+#else
+    qDebug() << "构建模式: Mock模拟";
+#endif
 
     QApplication app(argc, argv);
     app.setApplicationName("chipSetter");
@@ -62,7 +73,7 @@ int main(int argc, char *argv[])
 
     MainWindow mainWindow;
     mainWindow.setWindowTitle("固晶机控制系统 V1.0");
-    mainWindow.resize(1024, 765);
+    mainWindow.resize(1024, 710);
     mainWindow.setMinimumSize(1024, 680);
     mainWindow.show();
 

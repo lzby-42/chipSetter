@@ -38,17 +38,17 @@ void IoMonitorWidget::setupUI()
     diTitle->setStyleSheet("color:#90a4ae; font-size:10px;");
     mainLayout->addWidget(diTitle);
 
-    // DI网格: 4列 x 4行
+    // DI网格: 5列 x 4行 (19个DI: 5+5+5+4)
     QGridLayout* diGrid = new QGridLayout();
-    diGrid->setSpacing(3);
+    diGrid->setSpacing(2);
 
     QStringList diNames = DI_NAMES;
     for (int i = 0; i < DI_COUNT; ++i) {
         QLabel* lbl = new QLabel("O " + (i < diNames.size() ? diNames[i] : QString("DI_%1").arg(i + 1)), this);
         lbl->setStyleSheet(
-            "background:#333; color:#888; padding:2px 7px; border-radius:2px; font-size:8px;");
+            "background:#333; color:#888; padding:2px 4px; border-radius:2px; font-size:7px;");
         lbl->setMinimumHeight(20);
-        diGrid->addWidget(lbl, i / 4, i % 4);
+        diGrid->addWidget(lbl, i / 5, i % 5);
         m_diLabels.append(lbl);
     }
     mainLayout->addLayout(diGrid);

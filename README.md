@@ -76,12 +76,16 @@ chipSetter/
 ├── tests/                        # 单元测试
 │   ├── tests.pro                 # 测试工程 (subdirs)
 │   ├── test_process_manager.pro  # ProcessManager 测试
-│   ├── test_process_manager.cpp  # 10 个测试用例
+│   ├── test_process_manager.cpp
 │   ├── test_hardware_config.pro  # HardwareConfig 测试
 │   ├── test_hardware_config.cpp
 │   ├── test_motor_axis.pro       # MotorAxis 测试
-│   ├── test_motor_axis.cpp
-│   └── test_io_alarm_models.pro  # IO/Alarm 模型测试
+│   └── test_motor_axis.cpp
+│
+├── scripts/                      # 编译脚本
+│   ├── build_debug.bat           # 一键编译 (双击运行)
+│   ├── build_debug.ps1           # PowerShell 包装
+│   └── build_debug.sh            # MSYS2 Bash 脚本
 │
 └── docs/                         # 设计文档
     └── superpowers/
@@ -120,28 +124,48 @@ chipSetter/
 
 ### 环境要求
 
-- Qt 5.15.2 (MinGW 32-bit)
-- MinGW-w64 32-bit 工具链 (i686-w64-mingw32)
-- Windows 10
+- Qt 5.15.2 MinGW 32-bit (`D:/tool/qt/5.15.2/mingw81_32`)
+- MSYS2 with MINGW32 工具链 (`D:/Code_Languages/C/msys64`)
+- Windows 10/11
 
-### 构建命令
+### 一键编译
 
 ```bash
-# 设置 PATH (根据实际安装路径调整)
-export PATH="/d/tool/Qt/5.15.2/mingw81_32/bin:$PATH"
-export PATH="/d/Code_Languages/C/msys64/mingw32/bin:$PATH"
+# 方式1: 双击运行 (Windows 资源管理器)
+scripts/build_debug.bat
 
-# 构建主程序
+# 方式2: PowerShell
+powershell -File scripts/build_debug.ps1
+
+# 方式3: MSYS2 MINGW32 终端
+bash scripts/build_debug.sh
+
+# 清理后重新编译
+scripts/build_debug.bat clean
+```
+
+编译成功后输出 `debug/chipSetter.exe`。
+
+### 手动编译
+
+```bash
+# 在 MSYS2 MINGW32 终端中:
+export MSYSTEM=MINGW32
+export PATH="/d/tool/qt/5.15.2/mingw81_32/bin:/mingw32/bin:$PATH"
 cd chipSetter
-qmake chipSetter.pro
-make -j4
-# 输出: release/chipSetter.exe
+qmake chipSetter.pro CONFIG+=debug CONFIG+=console
+make -f Makefile.Debug -j4
+```
 
-# 构建并运行测试
+### 构建并运行测试
+
+```bash
 cd tests
 qmake tests.pro
-make -j4
-./release/test_process_manager.exe -txt
+make -f Makefile.Debug -j4
+./debug/test_hardware_config.exe -txt
+./debug/test_motor_axis.exe -txt
+./debug/test_process_manager.exe -txt
 ```
 
 ### 部署到目标工控机

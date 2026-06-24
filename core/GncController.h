@@ -4,10 +4,14 @@
  *
  * 设计:
  *   - 纯虚接口 IGncController 定义所有硬件操作
- *   - MockGncController 提供无硬件时的模拟实现
- *   - 后续集成真实SDK时, 创建 GncControllerImpl : IGncController
+ *   - MockGncController 提供无硬件时的模拟实现 (仅Mock模式编译)
+ *   - GncControllerImpl 提供真实GTS SDK实现 (仅Real模式编译)
  *
- * 铁律: UI层绝不直接 #include "gxn.h", 只通过此接口与硬件交互
+ * 铁律: UI层绝不直接 #include "gts.h", 只通过此接口与硬件交互
+ *
+ * 编译模式:
+ *   USE_REAL_GNC → include "googol/gts.h" (真实MC_GPI=4等)
+ *   !USE_REAL_GNC → Mock结构体和常量
  */
 
 #ifndef GNCCONTROLLER_H
@@ -18,10 +22,12 @@
 #include <QVector>
 #include <QMap>
 #include <cmath>
-#include <cstdlib>   // rand()
+#include <cstdlib>
 
-// GNC SDK 结构体模拟定义 (真实SDK集成时替换为 #include "gxn.h")
-// 这些结构体与 gxn.h 中的定义保持一致
+// ============================================================
+// 真实GTS SDK 或 Mock模拟 (二选一, 由chipSetter.pro控制)
+// ============================================================
+// TMoveAbsolutePrmEx 两种模式都需要 (gts.h中无此结构体)
 struct TMoveAbsolutePrmEx {
     double pos;
     double vel;
@@ -34,24 +40,7 @@ struct TMoveAbsolutePrmEx {
     double decEndPercent;
 };
 
-struct TStandardHomePrm {
-    short mode;
-    double highSpeed;
-    double lowSpeed;
-    double acc;
-    double offset;
-    short check;
-    short autoZeroPos;
-    short motorStopDelay;
-};
-
-struct TStandardHomeStatus {
-    short run;
-    short stage;
-    short error;
-    long  capturePos;
-};
-
+// TLimitInfo — gts.h中无此类型, 两种模式都需要
 struct TLimitInfo {
     short hwLmtPositiveEnable;
     short hwLmtNegativeEnable;
@@ -63,19 +52,44 @@ struct TLimitInfo {
     short swLmtNegativeStatus;
 };
 
-// GNC SDK 常量 — IO类型定义
-#define MC_GPI  0   // 通用数字输入
-#define MC_GPO  1   // 通用数字输出
+#ifdef USE_REAL_GNC
+    #include "googol/gts.h"
+    // gts.h 提供: MC_GPI=4, MC_GPO=12, MC_LIMIT_POSITIVE=0, ...
+    // gts.h 提供: TStandardHomePrm, TStandardHomeStatus
+#else
+    // ---- Mock结构体与常量 (与GTS SDK无关) ----
+
+    struct TStandardHomePrm {
+        short mode;
+        double highSpeed;
+        double lowSpeed;
+        double acc;
+        double offset;
+        short check;
+        short autoZeroPos;
+        short motorStopDelay;
+    };
+
+    struct TStandardHomeStatus {
+        short run;
+        short stage;
+        short error;
+        long  capturePos;
+    };
+
+    // Mock IO常量
+    #define MC_GPI              0
+    #define MC_GPO              1
+    #define MC_LIMIT_POSITIVE   0
+    #define MC_LIMIT_NEGATIVE   1
+    #define MC_ALARM            2
+    #define MC_HOME             3
+
+#endif // USE_REAL_GNC
 
 /**
  * @class IGncController
  * @brief GNC SDK 抽象接口
- *
- * 所有Core层通过此接口访问硬件, 不直接调GNC SDK。
- * 实现了:
- *   - 硬件替换: 改一处换全部
- *   - 可测试: 测试时注入 MockGncController
- *   - 可模拟: 无硬件时也能运行和调试UI
  */
 class IGncController : public QObject
 {
@@ -116,17 +130,16 @@ public:
 
     // ---- 软限位 ----
     virtual bool setSoftLimit(short core, short axis, double positive, double negative) = 0;
+
+signals:
+    // 硬件错误信号 (MainWindow 连接此信号到 AlarmLogger)
+    void hardwareError(const QString& source, const QString& message);
 };
 
+#ifndef USE_REAL_GNC
 /**
  * @class MockGncController
- * @brief GNC控制器的模拟实现 — 无硬件时使用
- *
- * 所有运动用定时器模拟:
- *   - 点位运动: 匀速趋近目标位置
- *   - 回零: 模拟Home搜索流程
- *   - IO: 随机初始值, 可手动翻转
- *   - 用 QTimer 替代真实硬件轮询
+ * @brief GNC控制器的模拟实现 — 仅Mock模式编译
  */
 class MockGncController : public IGncController
 {
@@ -169,22 +182,21 @@ public:
     bool setSoftLimit(short core, short axis, double positive, double negative) override;
 
     // ---- Mock专用: 手动控制模拟状态 ----
-    void setDIValue(int diIndex, int value);       // 手动翻转DI (模拟传感器触发)
+    void setDIValue(int diIndex, int value);
     int  getDIValue(int diIndex) const;
-    void toggleDI(int diIndex);                    // 翻转某个DI
+    void toggleDI(int diIndex);
 
 private slots:
-    void onSimulationTick();                       // 定时器回调: 模拟运动+位置更新
+    void onSimulationTick();
 
 private:
     bool m_connected;
 
-    // 每个轴的状态
     struct MockAxisState {
         bool    enabled;
-        double  currentPos;         // 当前位置 (mm, 模拟)
-        double  targetPos;          // 目标位置 (mm)
-        double  velocity;           // 当前速度 (mm/s)
+        double  currentPos;
+        double  targetPos;
+        double  velocity;
         bool    moving;
         bool    homing;
         short   homeStage;
@@ -193,19 +205,16 @@ private:
         bool    homeError;
     };
 
-    // 13轴状态数组 (索引 0-based)
-    QVector<MockAxisState> m_axes;              // 13轴
+    QVector<MockAxisState> m_axes;
+    short m_diValues[20];                       // 19个DI (1-based, 索引0保留)
+    short m_doValues[13];                       // 4个DO (索引9-12, 其余保留)
 
-    // DI/DO 值数组
-    short m_diValues[17];                       // 16个DI (1-based)
-    short m_doValues[5];                        // 4个DO (1-based)
-
-    // 模拟定时器 (每50ms tick一次)
     QTimer* m_simTimer;
     int     m_tickCount;
 
-    static const int SIM_TICK_MS = 50;          // 模拟周期 50ms = 20Hz
+    static const int SIM_TICK_MS = 50;
     static const int AXIS_COUNT_MOCK = 13;
 };
+#endif // !USE_REAL_GNC
 
 #endif // GNCCONTROLLER_H
