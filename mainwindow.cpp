@@ -43,6 +43,8 @@ void MainWindow::createCoreModules()
     m_alarmLogger    = new AlarmLogger(this);
     m_statsCollector = new StatsCollector(this);
     m_processManager = new ProcessManager(this);
+    m_dispensingPlatform = new DispensingPlatformController(m_motorManager, m_alarmLogger, this);
+    m_pickupPlatform     = new PickupPlatformController(m_motorManager, m_alarmLogger, this);
 }
 
 // ============================================================
@@ -446,6 +448,8 @@ void MainWindow::initSystem()
     m_production->setConnectionStatus(m_gncController->isConnected());
 
     m_motorManager->initialize();
+    m_dispensingPlatform->initialize();
+    m_pickupPlatform->initialize();
     m_ioManager->initialize();
 
     m_statusBar->setMode(m_currentMode);
