@@ -102,6 +102,41 @@ void MainWindow::setupLayout()
     debugLayout->setContentsMargins(0, 0, 0, 0);
     debugLayout->setSpacing(2);
 
+    // 调试工具栏
+    QHBoxLayout* debugToolbar = new QHBoxLayout();
+    debugToolbar->setSpacing(4);
+
+    auto makeToolBtn = [this](const QString& text, const QString& style) {
+        QPushButton* btn = new QPushButton(text, this);
+        btn->setFixedSize(80, 24);
+        btn->setStyleSheet(style);
+        return btn;
+    };
+
+    QPushButton* enableAllBtn = makeToolBtn("全部使能",
+        "QPushButton { background:#1565c0; color:#fff; border:none; "
+        "border-radius:3px; font-size:10px; }"
+        "QPushButton:hover { background:#1976d2; }");
+    debugToolbar->addWidget(enableAllBtn);
+
+    QPushButton* clearAlarmBtn = makeToolBtn("清除报警",
+        "QPushButton { background:#333; color:#ccc; border:1px solid #555; "
+        "border-radius:3px; font-size:10px; }"
+        "QPushButton:hover { background:#444; }");
+    debugToolbar->addWidget(clearAlarmBtn);
+
+    // 连接调试工具按钮
+    connect(enableAllBtn, &QPushButton::clicked, this, [this]() {
+        for (int i = 1; i <= AXIS_COUNT; ++i)
+            m_motorManager->enableAxis(i);
+    });
+    connect(clearAlarmBtn, &QPushButton::clicked, this, [this]() {
+        m_alarmLogger->clearAll();
+    });
+
+    debugToolbar->addStretch();
+    debugLayout->addLayout(debugToolbar);
+
     QHBoxLayout* middleRow = new QHBoxLayout();
     middleRow->setSpacing(3);
 

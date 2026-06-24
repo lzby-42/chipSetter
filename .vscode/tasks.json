@@ -8,7 +8,8 @@
             "args": [
                 "chipSetter.pro",
                 "CONFIG+=debug",
-                "CONFIG+=console"
+                "CONFIG+=console",
+                "CONFIG+=real_gnc"
             ],
             "options": {
                 "cwd": "${workspaceFolder}"

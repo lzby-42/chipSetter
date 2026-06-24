@@ -12,8 +12,10 @@
 #define ALARMLISTWIDGET_H
 
 #include <QWidget>
-#include <QListWidget>
 #include <QLabel>
+#include <QVBoxLayout>
+#include <QFrame>
+#include <QVector>
 #include "models/AlarmRecord.h"
 
 class AlarmListWidget : public QWidget
@@ -33,9 +35,11 @@ private:
     void setupUI();
     void updateCountBadge();
 
-    QListWidget*  m_listWidget;
-    QLabel*       m_countLabel;
-    int           m_activeCount;
+    QWidget*        m_alarmContainer;
+    QVBoxLayout*    m_alarmLayout;
+    QLabel*         m_countLabel;
+    QVector<QFrame*> m_alarmFrames;
+    int             m_activeCount;
 };
 
 #endif // ALARMLISTWIDGET_H
