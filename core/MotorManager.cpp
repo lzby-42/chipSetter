@@ -132,20 +132,26 @@ void MotorManager::homeRequest(int axisId)
         }
     }
 
+    // 使用标准回零API HOME_MODE_LIMIT (限位触发)
+    // 方向: mode 10-18 正向, 28-36 负向
     TStandardHomePrm prm;
     memset(&prm, 0, sizeof(prm));
-    prm.mode         = 10;      // HOME_MODE_LIMIT: 限位回零 (通过限位开关触发)
-    prm.highSpeed    = 10.0;    // pulse/ms
-    prm.lowSpeed     = 5.0;
-    prm.acc          = 1.0;
-    prm.offset       = 0;
-    prm.check        = 0;
-    prm.autoZeroPos  = 1;       // 回零后自动清零
+    prm.mode         = 10;      // HOME_MODE_LIMIT: 正向搜索限位
+    prm.highSpeed    = 10.0;    // pulse/ms 高速段
+    prm.lowSpeed     = 5.0;     // pulse/ms 低速段 (触碰限位后)
+    prm.acc          = 1.0;     // pulse/ms^2
+    prm.offset       = 0;       // 回零偏移 (pulse)
+    prm.check        = 1;       // 启用自检: 验证轴已使能/无报警/未在限位上
+    prm.autoZeroPos  = 1;       // 回零后自动清零位置
+    prm.motorStopDelay = 100;   // 电机停止延迟 (ms)
 
-    bool ok = m_controller->executeHome(GNC_CORE_NUM, static_cast<short>(axisId), prm);
+    short axis = static_cast<short>(axisId);
+    bool ok = m_controller->executeHome(GNC_CORE_NUM, axis, prm);
     if (ok) {
         m_axes[axisId - 1].isHomed = false;
-        qDebug() << "MotorManager: 轴" << axisId << "开始回零";
+        qDebug() << "MotorManager: 轴" << axisId << "开始回零 mode=" << prm.mode;
+    } else {
+        qWarning() << "MotorManager: 轴" << axisId << "回零命令发送失败";
     }
 }
 
@@ -318,8 +324,10 @@ void MotorManager::onPollTimer()
                 ax.currentPosition = 0.0;
                 emit homeFinished(i + 1, true, homeSts.stage);
                 emit positionUpdated(i + 1, 0.0);
+                qDebug() << "MotorManager: 轴" << axisId << "回零完成";
             } else if (homeSts.error != 0) {
                 ax.isMoving = false;
+                qWarning() << "MotorManager: 轴" << axisId << "回零失败 error=" << homeSts.error << " stage=" << homeSts.stage;
                 emit homeFinished(i + 1, false, homeSts.stage);
             }
         }
