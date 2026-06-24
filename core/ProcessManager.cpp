@@ -4,6 +4,8 @@
  */
 
 #include "ProcessManager.h"
+#include "core/DispensingPlatformController.h"
+#include "core/PickupPlatformController.h"
 #include <QDebug>
 
 // ============================================================
@@ -56,6 +58,16 @@ ProcessManager::~ProcessManager()
 {
     if (m_stepTimer->isActive())
         m_stepTimer->stop();
+}
+
+void ProcessManager::setDispensingPlatform(DispensingPlatformController* platform)
+{
+    m_dispensingPlatform = platform;
+}
+
+void ProcessManager::setPickupPlatform(PickupPlatformController* platform)
+{
+    m_pickupPlatform = platform;
 }
 
 // ============================================================

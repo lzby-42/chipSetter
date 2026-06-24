@@ -21,6 +21,9 @@
 #include <QVariantMap>
 #include <QDateTime>
 
+class DispensingPlatformController;
+class PickupPlatformController;
+
 class ProcessManager : public QObject
 {
     Q_OBJECT
@@ -45,6 +48,9 @@ public:
 
     explicit ProcessManager(QObject *parent = nullptr);
     ~ProcessManager();
+
+    void setDispensingPlatform(DispensingPlatformController* platform);
+    void setPickupPlatform(PickupPlatformController* platform);
 
     // ---- 状态查询 ----
     StepState stepState(int stepIndex) const;
@@ -101,6 +107,9 @@ private:
     int     m_cycleCount;
     int     m_substepProgress;        // 当前子步骤进度 (模拟用)
     QTimer* m_stepTimer;
+
+    DispensingPlatformController* m_dispensingPlatform = nullptr;
+    PickupPlatformController*     m_pickupPlatform     = nullptr;
 };
 
 #endif // PROCESSMANAGER_H

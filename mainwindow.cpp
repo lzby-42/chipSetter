@@ -450,6 +450,8 @@ void MainWindow::initSystem()
     m_motorManager->initialize();
     m_dispensingPlatform->initialize();
     m_pickupPlatform->initialize();
+    m_processManager->setDispensingPlatform(m_dispensingPlatform);
+    m_processManager->setPickupPlatform(m_pickupPlatform);
     m_ioManager->initialize();
 
     m_statusBar->setMode(m_currentMode);
