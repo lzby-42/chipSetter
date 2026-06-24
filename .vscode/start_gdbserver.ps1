@@ -68,14 +68,14 @@ gdbserver.exe --once 0.0.0.0:$port chipSetter.exe 1> "%TEMP%\gdb_stdout.txt" 2> 
             Write-Host "Batch: $batchPath"
             Get-Content $batchPath | ForEach-Object { Write-Host "  $_" }
 
-            # Schedule 5s in the future and WAIT for scheduler to fire.
+            # Schedule 30s in the future and WAIT for scheduler to fire.
             # Do NOT use schtasks /run — it ignores /it and runs in Session 0 (no GUI).
-            $startTime = (Get-Date).AddSeconds(5).ToString("HH:mm:ss")
+            $startTime = (Get-Date).AddSeconds(30).ToString("HH:mm:ss")
             schtasks /delete /tn $taskName /f 2>$null
             $createOut = schtasks /create /tn $taskName /tr "cmd /c `"$batchPath`"" /sc once /st $startTime /it /f 2>&1
             Write-Host "SchTasks Create: $createOut"
             Write-Host "Waiting for scheduler to fire at $startTime (NO /run — preserve /it for Session 1)..."
-            Start-Sleep -Seconds 10
+            Start-Sleep -Seconds 35
 
             # Check log files for error messages
             @("$env:TEMP\gdb_stdout.txt", "$env:TEMP\gdb_stderr.txt") | ForEach-Object {
