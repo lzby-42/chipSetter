@@ -24,6 +24,8 @@
 #include <QButtonGroup>
 #include "models/MotorAxis.h"
 
+class MotorManager;
+
 class MotorPtpWidget : public QWidget
 {
     Q_OBJECT
@@ -32,8 +34,8 @@ public:
     explicit MotorPtpWidget(QWidget *parent = nullptr);
     ~MotorPtpWidget();
 
-    // ---- 获取当前选中轴 ----
-    int currentAxisId() const;
+    void setMotorManager(MotorManager* mgr);
+    int  currentAxisId() const;
 
 public slots:
     // ---- 接收Core层更新 ----
@@ -41,6 +43,7 @@ public slots:
     void onMoveFinished(int axisId, bool success);
     void onHomeFinished(int axisId, bool success, int stage);
     void onAxisStatusChanged(int axisId, long status);
+    void onAxisEnableChanged(int axisId, bool enabled);  // 接收使能状态反馈
 
 signals:
     // ---- 用户操作信号 (→ MotorManager) ----
@@ -67,6 +70,7 @@ private:
 
     int             m_selectedAxisId;       // 当前选中轴 (1-based)
     double          m_currentPosition;      // 当前位置缓存
+    MotorManager*   m_motor = nullptr;
 
     // UI 控件
     QButtonGroup*   m_axisBtnGroup;         // 轴选择按钮组 (13个QPushButton)
@@ -81,8 +85,6 @@ private:
     QPushButton*    m_homeBtn;
     QPushButton*    m_clearAlarmBtn;
     QPushButton*    m_enableBtn;
-
-    bool            m_axisEnabled;          // 当前选中轴的使能状态
 };
 
 #endif // MOTORPTPWIDGET_H

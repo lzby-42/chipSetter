@@ -5,6 +5,7 @@
 
 #include "MotorPtpWidget.h"
 #include "core/HardwareConfig.h"
+#include "core/MotorManager.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QGridLayout>
@@ -15,7 +16,6 @@ MotorPtpWidget::MotorPtpWidget(QWidget *parent)
     : QWidget(parent)
     , m_selectedAxisId(1)
     , m_currentPosition(0.0)
-    , m_axisEnabled(false)
 {
     setupUI();
 }
@@ -199,9 +199,19 @@ int MotorPtpWidget::currentAxisId() const
     return m_selectedAxisId;
 }
 
+void MotorPtpWidget::setMotorManager(MotorManager* mgr)
+{
+    m_motor = mgr;
+}
+
 void MotorPtpWidget::onAxisButtonClicked(int axisId)
 {
     m_selectedAxisId = axisId;
+    // 更新使能按钮以反映新轴的使能状态
+    if (m_motor) {
+        const MotorAxis& ax = m_motor->axisState(axisId);
+        onAxisEnableChanged(axisId, ax.isEnabled);
+    }
 }
 
 void MotorPtpWidget::onRunClicked()
@@ -263,8 +273,15 @@ void MotorPtpWidget::onClearAlarmClicked()
 
 void MotorPtpWidget::onEnableClicked()
 {
-    m_axisEnabled = !m_axisEnabled;
-    if (m_axisEnabled) {
+    // 不自行切换状态, 只发射信号, 等待 MotorManager 反馈
+    bool targetState = !m_enableBtn->text().contains("失");
+    emit enableRequested(m_selectedAxisId, targetState);
+}
+
+void MotorPtpWidget::onAxisEnableChanged(int axisId, bool enabled)
+{
+    if (axisId != m_selectedAxisId) return;
+    if (enabled) {
         m_enableBtn->setText("失能");
         m_enableBtn->setStyleSheet(
             "QPushButton{background:#b71c1c;color:#fff;border:none;border-radius:2px;font-size:9px;}"
@@ -275,5 +292,4 @@ void MotorPtpWidget::onEnableClicked()
             "QPushButton{background:#1b5e20;color:#fff;border:none;border-radius:2px;font-size:9px;}"
             "QPushButton:hover{background:#2e7d32;}");
     }
-    emit enableRequested(m_selectedAxisId, m_axisEnabled);
 }
