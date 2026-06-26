@@ -494,8 +494,8 @@ void MainWindow::initSystem()
     m_production->setConnectionStatus(m_gncController->isConnected());
 
     m_motorManager->initialize();
-    m_motorManager->autoLoad();          // 加载用户保存的电机参数 (速度/加速度等)
-    m_motorManager->loadLimitsFromController(); // 软限位以cfg为准, 覆盖JSON旧值
+    m_motorManager->loadLimitsFromController(); // 先从控制器读cfg基线值
+    m_motorManager->autoLoad();          // JSON用户参数覆盖 (优先级高于cfg)
     m_dispensingPlatform->initialize();
     m_pickupPlatform->initialize();
     m_processManager->setDispensingPlatform(m_dispensingPlatform);
