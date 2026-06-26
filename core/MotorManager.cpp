@@ -144,7 +144,7 @@ void MotorManager::homeRequest(int axisId)
     prm.lowSpeed     = 5.0;     // pulse/ms 低速段 (触碰限位后)
     prm.acc          = 1.0;     // pulse/ms^2
     prm.offset       = 0;       // 回零偏移 (pulse)
-    prm.check        = 1;       // 启用自检: 验证轴已使能/无报警/未在限位上
+    prm.check        = 0;       // 不自检 (无编码器, 自检会误报)
     prm.autoZeroPos  = 1;       // 回零后自动清零位置
     prm.motorStopDelay = 100;   // 电机停止延迟 (ms)
 
