@@ -64,6 +64,16 @@ void MotorManager::loadLimitsFromController()
     qDebug() << "MotorManager: 从控制器读取软限位完成 (0=未设则保留默认)";
 }
 
+bool MotorManager::saveConfigToController(const QString& cfgFile)
+{
+    if (!m_controller || !m_controller->isConnected()) return false;
+    bool ok = m_controller->saveConfig(GNC_CORE_NUM, cfgFile);
+    if (ok) {
+        qDebug() << "MotorManager: 参数已保存到控制器cfg →" << cfgFile;
+    }
+    return ok;
+}
+
 bool MotorManager::enableAxis(int axisId)
 {
     if (axisId < 1 || axisId > AXIS_COUNT) return false;

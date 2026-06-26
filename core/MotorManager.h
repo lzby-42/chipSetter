@@ -55,6 +55,7 @@ public:
     void startPolling(int intervalMs = 50);     // 开始轮询
     void stopPolling();                         // 停止轮询
     void loadLimitsFromController();            // 从GNC控制器读软限位 (cfg设定值)
+    bool saveConfigToController(const QString& cfgFile); // 保存当前参数到cfg文件
 
 public slots:
     // ---- 运动请求 (来自UI) ----

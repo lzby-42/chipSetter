@@ -94,6 +94,7 @@ public:
     // ---- 软限位 (pulse单位, 由MotorManager做mm→pulse换算) ----
     bool setSoftLimit(short core, short axis, long posPulse, long negPulse);
     bool getSoftLimit(short core, short axis, long& posPulse, long& negPulse);
+    bool saveConfig(short core, const QString& cfgFile);  // 保存当前参数到cfg
 
 signals:
     void hardwareError(const QString& source, const QString& message);

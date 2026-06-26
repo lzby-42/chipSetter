@@ -324,3 +324,12 @@ bool GncController::getSoftLimit(short core, short axis, long& posPulse, long& n
         return false;
     return true;
 }
+
+bool GncController::saveConfig(short core, const QString& cfgFile)
+{
+    QByteArray path = cfgFile.toLocal8Bit();
+    short rtn = GTN_SaveConfig(core, path.data());
+    if (gtsCall("GTN_SaveConfig", rtn) != 0) return false;
+    qDebug() << "[Gnc] saveConfig →" << cfgFile;
+    return true;
+}
