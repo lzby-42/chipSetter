@@ -92,8 +92,6 @@ bool GncController::netInit(const QString& xmlFile, int overTimeSec)
 
 bool GncController::loadConfig(short core, const QString& cfgFile)
 {
-    Q_UNUSED(core);
-
     QStringList searchPaths;
     searchPaths << cfgFile
                 << "googol/" + cfgFile
@@ -112,9 +110,9 @@ bool GncController::loadConfig(short core, const QString& cfgFile)
         return false;
     }
 
-    qDebug() << "[Gnc] GT_LoadConfig(" << m_configPath << ")...";
+    qDebug() << "[Gnc] GTN_LoadConfig(core=" << core << "," << m_configPath << ")...";
     QByteArray pathBytes = m_configPath.toLocal8Bit();
-    short rtn = GT_LoadConfig(pathBytes.data());
+    short rtn = GTN_LoadConfig(core, pathBytes.data());
     if (gtsCall("GT_LoadConfig", rtn) != 0) {
         emit hardwareError("GTS", QString("加载配置失败! GT_LoadConfig返回%1, 文件:%2").arg(rtn).arg(m_configPath));
         qCritical() << "[Gnc] LoadConfig失败!" << m_configPath;
