@@ -5,6 +5,7 @@
 
 #include "MotorParamWidget.h"
 #include "core/HardwareConfig.h"
+#include "core/MotorManager.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QGridLayout>
@@ -21,6 +22,11 @@ MotorParamWidget::MotorParamWidget(QWidget *parent)
 
 MotorParamWidget::~MotorParamWidget()
 {
+}
+
+void MotorParamWidget::setMotorManager(MotorManager* mgr)
+{
+    m_motor = mgr;
 }
 
 void MotorParamWidget::setupUI()
@@ -152,26 +158,26 @@ void MotorParamWidget::setupUI()
         "QPushButton:hover { background:#2e7d32; }");
     actionLayout->addWidget(applyBtn);
 
-    QPushButton* saveBtn = new QPushButton("保存", this);
-    saveBtn->setStyleSheet(
+    QPushButton* exportBtn = new QPushButton("导出", this);
+    exportBtn->setStyleSheet(
         "QPushButton { background:#37474f; color:#fff; border:none; "
         "border-radius:3px; padding:4px 16px; font-size:10px; }"
         "QPushButton:hover { background:#455a64; }");
-    actionLayout->addWidget(saveBtn);
+    actionLayout->addWidget(exportBtn);
 
-    QPushButton* loadBtn = new QPushButton("加载", this);
-    loadBtn->setStyleSheet(
-        "QPushButton { background:#b71c1c; color:#ef9a9a; border:none; "
+    QPushButton* importBtn = new QPushButton("导入", this);
+    importBtn->setStyleSheet(
+        "QPushButton { background:#4a148c; color:#ce93d8; border:none; "
         "border-radius:3px; padding:4px 16px; font-size:10px; }"
-        "QPushButton:hover { background:#d32f2f; }");
-    actionLayout->addWidget(loadBtn);
+        "QPushButton:hover { background:#6a1b9a; }");
+    actionLayout->addWidget(importBtn);
 
     actionLayout->addStretch();
     mainLayout->addLayout(actionLayout);
 
-    connect(applyBtn, &QPushButton::clicked, this, &MotorParamWidget::onApplyClicked);
-    connect(saveBtn,  &QPushButton::clicked, this, &MotorParamWidget::onSaveClicked);
-    connect(loadBtn,  &QPushButton::clicked, this, &MotorParamWidget::onLoadClicked);
+    connect(applyBtn,  &QPushButton::clicked, this, &MotorParamWidget::onApplyClicked);
+    connect(exportBtn, &QPushButton::clicked, this, &MotorParamWidget::onExportClicked);
+    connect(importBtn, &QPushButton::clicked, this, &MotorParamWidget::onImportClicked);
 
     mainLayout->addStretch();
 }
@@ -179,7 +185,7 @@ void MotorParamWidget::setupUI()
 void MotorParamWidget::onAxisButtonClicked(int axisId)
 {
     m_selectedAxisId = axisId;
-    // 加载新轴的参数
+    loadAxisFromManager(axisId);
 }
 
 void MotorParamWidget::setCurrentAxisId(int axisId)
@@ -188,65 +194,80 @@ void MotorParamWidget::setCurrentAxisId(int axisId)
     if (m_axisBtnGroup->button(axisId)) {
         m_axisBtnGroup->button(axisId)->setChecked(true);
     }
-    loadAxisDefaults(axisId);
+    loadAxisFromManager(axisId);
 }
 
-void MotorParamWidget::loadAxisDefaults(int axisId)
+void MotorParamWidget::loadAxisFromManager(int axisId)
 {
-    Q_UNUSED(axisId);
-    // 加载默认值 (外部通过 onAxisParamChanged slot 填充实际值)
-    m_leadScrewSpin->setValue(DEFAULT_LEAD_SCREW);
-    m_pulsePerRevSpin->setValue(DEFAULT_PULSE_PER_REV);
-    m_gearRatioSpin->setValue(DEFAULT_GEAR_RATIO);
-    m_maxVelocitySpin->setValue(DEFAULT_VELOCITY);
-    m_accelSpin->setValue(DEFAULT_ACCEL);
-    m_decelSpin->setValue(DEFAULT_DECEL);
-    m_softLimitPosSpin->setValue(300.0);
-    m_softLimitNegSpin->setValue(0.0);
-    m_homeVelSpin->setValue(50.0);
-    m_homeOffsetSpin->setValue(2.0);
+    if (!m_motor) {
+        // 无MotorManager时用默认值
+        m_leadScrewSpin->setValue(DEFAULT_LEAD_SCREW);
+        m_pulsePerRevSpin->setValue(DEFAULT_PULSE_PER_REV);
+        m_gearRatioSpin->setValue(DEFAULT_GEAR_RATIO);
+        m_maxVelocitySpin->setValue(DEFAULT_VELOCITY);
+        m_accelSpin->setValue(DEFAULT_ACCEL);
+        m_decelSpin->setValue(DEFAULT_DECEL);
+        m_softLimitPosSpin->setValue(9999.0);
+        m_softLimitNegSpin->setValue(-9999.0);
+        m_homeVelSpin->setValue(50.0);
+        m_homeOffsetSpin->setValue(2.0);
+        return;
+    }
+    const MotorAxis& ax = m_motor->axisState(axisId);
+    m_leadScrewSpin->setValue(ax.leadScrew);
+    m_pulsePerRevSpin->setValue(ax.pulsePerRev);
+    m_gearRatioSpin->setValue(ax.gearRatio);
+    m_maxVelocitySpin->setValue(ax.velocity);
+    m_accelSpin->setValue(ax.acceleration);
+    m_decelSpin->setValue(ax.deceleration);
+    m_softLimitPosSpin->setValue(ax.softLimitPositive);
+    m_softLimitNegSpin->setValue(ax.softLimitNegative);
+    m_homeVelSpin->setValue(ax.homeVelocity);
+    m_homeOffsetSpin->setValue(ax.homeOffset);
 }
 
 void MotorParamWidget::onApplyClicked()
 {
     MotorAxis params;
-    params.axisId          = m_selectedAxisId;
-    params.velocity        = m_maxVelocitySpin->value();
-    params.acceleration    = m_accelSpin->value();
-    params.deceleration    = m_decelSpin->value();
-    params.leadScrew       = m_leadScrewSpin->value();
-    params.pulsePerRev     = m_pulsePerRevSpin->value();
-    params.gearRatio       = m_gearRatioSpin->value();
+    params.axisId           = m_selectedAxisId;
+    params.velocity         = m_maxVelocitySpin->value();
+    params.acceleration     = m_accelSpin->value();
+    params.deceleration     = m_decelSpin->value();
+    params.leadScrew        = m_leadScrewSpin->value();
+    params.pulsePerRev      = m_pulsePerRevSpin->value();
+    params.gearRatio        = m_gearRatioSpin->value();
     params.softLimitPositive = m_softLimitPosSpin->value();
     params.softLimitNegative = m_softLimitNegSpin->value();
+    params.homeVelocity     = m_homeVelSpin->value();
+    params.homeOffset       = m_homeOffsetSpin->value();
 
-    emit paramsUpdateRequested(m_selectedAxisId, params);
+    emit applyRequested(m_selectedAxisId, params);
 }
 
-void MotorParamWidget::onSaveClicked()
+void MotorParamWidget::onExportClicked()
 {
     QString filePath = QFileDialog::getSaveFileName(
-        this, "保存电机参数",
+        this, "导出电机参数",
         "motor_params.json",
         "JSON文件 (*.json)");
     if (!filePath.isEmpty()) {
-        emit saveRequested(filePath);
+        emit exportRequested(filePath);
     }
 }
 
-void MotorParamWidget::onLoadClicked()
+void MotorParamWidget::onImportClicked()
 {
     QString filePath = QFileDialog::getOpenFileName(
-        this, "加载电机参数",
+        this, "导入电机参数",
         "",
         "JSON文件 (*.json)");
     if (!filePath.isEmpty()) {
-        emit loadRequested(filePath);
+        emit importRequested(filePath);
     }
 }
 
-void MotorParamWidget::onAxisParamChanged(int axisId)
+void MotorParamWidget::onParamsApplied(int axisId)
 {
     if (axisId != m_selectedAxisId) return;
-    // 由MainWindow连接实际参数值到此slot
+    loadAxisFromManager(axisId);  // 读回实际值, 确认写入生效
 }

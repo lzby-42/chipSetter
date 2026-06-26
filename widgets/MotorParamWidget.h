@@ -20,6 +20,8 @@
 #include <QButtonGroup>
 #include "models/MotorAxis.h"
 
+class MotorManager;
+
 class MotorParamWidget : public QWidget
 {
     Q_OBJECT
@@ -28,30 +30,32 @@ public:
     explicit MotorParamWidget(QWidget *parent = nullptr);
     ~MotorParamWidget();
 
+    void setMotorManager(MotorManager* mgr);    // 注入, 用于读取轴参数
+
 public slots:
-    void onAxisParamChanged(int axisId);        // 接收Core层参数更新
+    void onParamsApplied(int axisId);           // 接收MotorManager反馈, 刷新UI
     void setCurrentAxisId(int axisId);          // 切换轴
 
 signals:
-    void paramsUpdateRequested(int axisId, const MotorAxis& params);
-    void saveRequested(const QString& filePath);
-    void loadRequested(const QString& filePath);
+    void applyRequested(int axisId, const MotorAxis& params);  // 应用 + 自动保存
+    void exportRequested(const QString& filePath);              // 手动导出
+    void importRequested(const QString& filePath);              // 手动导入
 
 private slots:
     void onAxisButtonClicked(int axisId);
-    void onApplyClicked();                      // 应用参数
-    void onSaveClicked();                       // 保存到文件
-    void onLoadClicked();                       // 从文件加载
+    void onApplyClicked();
+    void onExportClicked();
+    void onImportClicked();
 
 private:
     void setupUI();
-    void loadAxisDefaults(int axisId);          // 加载轴的当前参数到编辑框
+    void loadAxisFromManager(int axisId);       // 从MotorManager读参数到编辑框
 
     int  m_selectedAxisId;
+    MotorManager* m_motor = nullptr;
 
     QButtonGroup*    m_axisBtnGroup;
 
-    // 参数编辑控件
     QDoubleSpinBox*  m_leadScrewSpin;
     QSpinBox*        m_pulsePerRevSpin;
     QDoubleSpinBox*  m_gearRatioSpin;

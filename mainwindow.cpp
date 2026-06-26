@@ -56,6 +56,7 @@ void MainWindow::createWidgets()
     m_statusBar = new StatusBarWidget(this);
     m_motorPtp  = new MotorPtpWidget(this);
     m_motorParam = new MotorParamWidget(this);
+    m_motorParam->setMotorManager(m_motorManager);  // 注入, 让控件能读取实际轴参数
     m_ioMonitor  = new IoMonitorWidget(this);
     m_stats      = new StatsWidget(this);
     m_alarmList  = new AlarmListWidget(this);
