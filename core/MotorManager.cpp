@@ -295,8 +295,9 @@ bool MotorManager::autoLoad()
 {
     QString path = configFilePath();
     if (!QFile::exists(path)) {
-        qDebug() << "MotorManager: 配置文件不存在, 使用默认参数 →" << path;
-        return false;
+        qDebug() << "MotorManager: 配置文件不存在, 生成默认参数 →" << path;
+        autoSave();   // 用当前内存参数 (含cfg读取的软限位) 生成JSON
+        return true;
     }
     return importFromFile(path);
 }
