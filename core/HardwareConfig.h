@@ -4,28 +4,33 @@
 #define GNC_CORE_NUM        1
 #define GNC_AXIS_START      1
 
-#define AXIS_COUNT          13
+#define AXIS_COUNT          16
+#define MOTOR_PARAMS_FILE   "motor_params.json"   // 电机参数配置文件 (exe同目录)
 
-// ---- 轴ID定义 (逻辑编号 1-13, 对应实际物理轴) ----
-#define AXIS_JIAO_PAN           1   // 胶盘 (物理轴1)
-#define AXIS_DISPENSE_X         2   // 点胶平台X轴 (物理轴2)
-#define AXIS_DISPENSE_Y         3   // 点胶平台Y轴 (物理轴3)
-#define AXIS_PICKUP_ARM_ROT     4   // 取晶臂旋转 (物理轴7)
-#define AXIS_DISPENSE_ARM_ROT   5   // 点胶臂旋转 (物理轴8)
-#define AXIS_DISPENSE_ARM_UD    6   // 点胶臂上下 (物理轴9)
-#define AXIS_PICKUP_ARM_UD      7   // 取晶臂上下 (物理轴10)
-#define AXIS_EJECTOR_UP         8   // 上顶针 (物理轴11)
-#define AXIS_EJECTOR_DOWN       9   // 下顶针 (物理轴12)
-#define AXIS_PICKUP_X          10   // 取晶平台X轴 (物理轴13)
-#define AXIS_PICKUP_Y          11   // 取晶平台Y轴 (物理轴14)
-#define AXIS_PICKUP_W          12   // 取晶平台W轴 (物理轴15)
-#define AXIS_GRIPPER           13   // 吸嘴 (物理轴16)
+// ---- 轴ID定义 (对应 core1_20260625.cfg [axisN]) ----
+#define AXIS_JIAO_PAN           1   // 胶盘
+#define AXIS_DISPENSE_X         2   // 点胶平台X轴
+#define AXIS_DISPENSE_Y         3   // 点胶平台Y轴
+#define AXIS_RESERVED_4         4   // (cfg axis4, 无配置信号)
+#define AXIS_RESERVED_5         5   // (cfg axis5, 报警轴)
+#define AXIS_RESERVED_6         6   // (cfg axis6, 报警轴)
+#define AXIS_PICKUP_ARM_ROT     7   // 取晶臂转动
+#define AXIS_DISPENSE_ARM_ROT   8   // 点胶臂转动
+#define AXIS_DISPENSE_ARM_UD    9   // 点胶臂上下
+#define AXIS_PICKUP_ARM_UD     10   // 取晶臂上下
+#define AXIS_EJECTOR_UP        11   // 上顶针
+#define AXIS_EJECTOR_DOWN      12   // 下顶针
+#define AXIS_PICKUP_X          13   // 取晶平台X轴
+#define AXIS_PICKUP_Y          14   // 取晶平台Y轴
+#define AXIS_PICKUP_W          15   // 取晶平台W轴
+#define AXIS_GRIPPER           16   // 抓手
 
 #define AXIS_NAMES { \
     "胶盘", "点胶平台X轴", "点胶平台Y轴", \
-    "取晶臂旋转", "点胶臂旋转", "点胶臂上下", "取晶臂上下", \
+    "预留4", "预留5", "预留6", \
+    "取晶臂转动", "点胶臂转动", "点胶臂上下", "取晶臂上下", \
     "上顶针", "下顶针", "取晶平台X轴", "取晶平台Y轴", \
-    "取晶平台W轴", "吸嘴" \
+    "取晶平台W轴", "抓手" \
 }
 
 // ---- IO数量 (匹配实际机器) ----
@@ -88,35 +93,35 @@
 
 // ============================================================
 // DI → 轴限位映射表
-// 基于 core1_20261212.cfg 中的实际映射关系
+// 基于 core1_20260625.cfg 中的 limitPositiveIndex/limitNegativeIndex
 // signalType: 0=Home, 1=正限位, 2=负限位, -1=普通状态(不限位)
 // ============================================================
 struct DiToAxisMapping {
     int diId;       // DI通道编号 (1-19, 对应GPI)
-    int axisId;     // 对应逻辑轴ID (1-13), 0=无映射
+    int axisId;     // 对应逻辑轴ID (1-16), 0=无映射
     int signalType; // 0=Home, 1=正限位, 2=负限位, -1=无
 };
 
 #define DI_AXIS_MAP { \
-    { 1,  2, 1 },  /* GPI1  X0  点胶平台X+   → 轴2 正限位 */ \
-    { 2,  2, 2 },  /* GPI2  X1  点胶平台X-   → 轴2 负限位 */ \
-    { 3,  2, 0 },  /* GPI3  X2  点胶平台X_Home → 轴2 Home  */ \
-    { 4,  3, 1 },  /* GPI4  X3  点胶平台Y+   → 轴3 正限位 */ \
-    { 5,  3, 2 },  /* GPI5  X4  点胶平台Y-   → 轴3 负限位 */ \
-    { 6,  3, 0 },  /* GPI6  X5  点胶平台Y_Home → 轴3 Home  */ \
-    { 7, 10, 1 },  /* GPI7  X6  取晶X+       → 轴10 正限位 */ \
-    { 8, 10, 2 },  /* GPI8  X7  取晶X-       → 轴10 负限位 */ \
-    { 9, 10, 0 },  /* GPI9  X8  取晶X_Home   → 轴10 Home  */ \
-    {10, 11, 2 },  /* GPI10 X9  取晶Y-       → 轴11 负限位 */ \
-    {11, 11, 1 },  /* GPI11 X10 取晶Y+       → 轴11 正限位 */ \
-    {12,  4, -1},  /* GPI12 X11 取晶臂旋转    → 轴4  状态   */ \
-    {13,  5, -1},  /* GPI13 X12 点胶臂旋转    → 轴5  状态   */ \
-    {14, 12, -1},  /* GPI14 X13 取晶平台旋转  → 轴12 状态   */ \
-    {15, 13, 0 },  /* GPI15 X14 吸嘴Home     → 轴13 Home  */ \
-    {16,  8, -1},  /* GPI16 X15 顶针1        → 轴8  状态   */ \
-    {17,  9, -1},  /* GPI17 X16 顶针2        → 轴9  状态   */ \
-    {18,  6, -1},  /* GPI18 X17 点胶上下到位  → 轴6  状态   */ \
-    {19,  7, -1},  /* GPI19 X18 取晶臂上下    → 轴7  状态   */ \
+    { 1,  2, 1 },  /* GPI1  X0  点胶平台X+    → 轴2  正限位 */ \
+    { 2,  2, 2 },  /* GPI2  X1  点胶平台X-    → 轴2  负限位 */ \
+    { 3,  2, 0 },  /* GPI3  X2  点胶平台X_Home → 轴2  Home  */ \
+    { 4,  3, 1 },  /* GPI4  X3  点胶平台Y+    → 轴3  正限位 */ \
+    { 5,  3, 2 },  /* GPI5  X4  点胶平台Y-    → 轴3  负限位 */ \
+    { 6,  3, 0 },  /* GPI6  X5  点胶平台Y_Home → 轴3  Home  */ \
+    { 7, 13, 1 },  /* GPI7  X6  取晶X+        → 轴13 正限位 */ \
+    { 8, 13, 2 },  /* GPI8  X7  取晶X-        → 轴13 负限位 */ \
+    { 9, 13, 0 },  /* GPI9  X8  取晶X_Home    → 轴13 Home  */ \
+    {10, 14, 2 },  /* GPI10 X9  取晶Y-        → 轴14 负限位 */ \
+    {11, 14, 1 },  /* GPI11 X10 取晶Y+        → 轴14 正限位 */ \
+    {12,  7, -1},  /* GPI12 X11 取晶臂转动     → 轴7  状态  */ \
+    {13,  8, -1},  /* GPI13 X12 点胶臂转动     → 轴8  状态  */ \
+    {14, 15, -1},  /* GPI14 X13 取晶平台W轴    → 轴15 状态  */ \
+    {15, 16, 0 },  /* GPI15 X14 抓手Home       → 轴16 Home  */ \
+    {16, 11, -1},  /* GPI16 X15 上顶针         → 轴11 状态  */ \
+    {17, 12, -1},  /* GPI17 X16 下顶针         → 轴12 状态  */ \
+    {18,  9, -1},  /* GPI18 X17 点胶臂上下     → 轴9  状态  */ \
+    {19, 10, -1},  /* GPI19 X18 取晶臂上下     → 轴10 状态  */ \
 }
 
 #endif // HARDWARECONFIG_H
