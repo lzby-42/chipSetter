@@ -238,9 +238,14 @@ bool MotorManager::updateAxisParams(int axisId, const MotorAxis& params)
     ax.homeOffset         = params.homeOffset;
 
     // 同步到GNC软限位
-    m_controller->setSoftLimit(GNC_CORE_NUM, static_cast<short>(axisId),
-                               mmToPulse(axisId, ax.softLimitPositive),
-                               mmToPulse(axisId, ax.softLimitNegative));
+    // 仅在限位非默认宽值时写入控制器 (部分轴不支持软限位, 写了报错7)
+    bool hasLimits = (ax.softLimitPositive > -9990 && ax.softLimitPositive < 9990) ||
+                     (ax.softLimitNegative > -9990 && ax.softLimitNegative < 9990);
+    if (hasLimits) {
+        m_controller->setSoftLimit(GNC_CORE_NUM, static_cast<short>(axisId),
+                                   mmToPulse(axisId, ax.softLimitPositive),
+                                   mmToPulse(axisId, ax.softLimitNegative));
+    }
 
     emit axisParamChanged(axisId);
     return true;

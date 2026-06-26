@@ -308,8 +308,8 @@ bool GncController::writeDO(short core, short doType, short doIndex, short* valu
 
 bool GncController::setSoftLimit(short core, short axis, long posPulse, long negPulse)
 {
-    Q_UNUSED(core);
-    if (gtsCall("GT_SetSoftLimit", GT_SetSoftLimit(axis, posPulse, negPulse)) != 0)
+    // 使用GTN_版本 (网络控制器需要core参数)
+    if (gtsCall("GTN_SetSoftLimit", GTN_SetSoftLimit(core, axis, posPulse, negPulse)) != 0)
         return false;
     qDebug() << "[Gnc] setSoftLimit axis=" << axis << " pos=" << posPulse << " neg=" << negPulse << "pulse";
     return true;
@@ -317,8 +317,7 @@ bool GncController::setSoftLimit(short core, short axis, long posPulse, long neg
 
 bool GncController::getSoftLimit(short core, short axis, long& posPulse, long& negPulse)
 {
-    Q_UNUSED(core);
-    if (gtsCall("GT_GetSoftLimit", GT_GetSoftLimit(axis, &posPulse, &negPulse)) != 0)
+    if (gtsCall("GTN_GetSoftLimit", GTN_GetSoftLimit(core, axis, &posPulse, &negPulse)) != 0)
         return false;
     return true;
 }
