@@ -53,10 +53,14 @@ void MotorManager::loadLimitsFromController()
     for (int i = 1; i <= AXIS_COUNT; ++i) {
         long posPulse = 0, negPulse = 0;
         if (m_controller->getSoftLimit(GNC_CORE_NUM, static_cast<short>(i), posPulse, negPulse)) {
-            m_axes[i - 1].softLimitPositive = pulseToMm(i, posPulse);
-            m_axes[i - 1].softLimitNegative = pulseToMm(i, negPulse);
+            // cfg未设限位时返回0, 保留默认宽限位 (不在cfg设限位的轴不拦)
+            if (posPulse != 0 || negPulse != 0) {
+                m_axes[i - 1].softLimitPositive = pulseToMm(i, posPulse);
+                m_axes[i - 1].softLimitNegative = pulseToMm(i, negPulse);
+            }
         }
     }
+    qDebug() << "MotorManager: 从控制器读取软限位完成 (0=未设则保留默认)";
 }
 
 bool MotorManager::enableAxis(int axisId)
@@ -155,7 +159,7 @@ void MotorManager::homeRequest(int axisId)
     prm.lowSpeed     = 5.0;     // pulse/ms 低速段 (触碰限位后)
     prm.acc          = 1.0;     // pulse/ms^2
     prm.offset       = 0;       // 回零偏移 (pulse)
-    prm.check        = 1;       // 启用自检: 验证轴已使能/无报警/未在限位上
+    prm.check        = 0;       // 不自检 (无编码器轴自检会误报error=-1)
     prm.autoZeroPos  = 1;       // 回零后自动清零位置
     prm.motorStopDelay = 100;   // 电机停止延迟 (ms)
 
