@@ -9,6 +9,8 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QDebug>
+#include <QCoreApplication>
+#include <QDir>
 
 MotorManager::MotorManager(GncController* controller, QObject *parent)
     : QObject(parent)
@@ -150,6 +152,7 @@ void MotorManager::homeRequest(int axisId)
     bool ok = m_controller->executeHome(GNC_CORE_NUM, axis, prm);
     if (ok) {
         m_axes[axisId - 1].isHomed = false;
+        m_axes[axisId - 1].isMoving = true;  // 回零进行中, 轮询将检测完成/失败
         qDebug() << "MotorManager: 轴" << axisId << "开始回零 mode=" << prm.mode;
     } else {
         qWarning() << "MotorManager: 轴" << axisId << "回零命令发送失败";
@@ -194,6 +197,8 @@ bool MotorManager::updateAxisParams(int axisId, const MotorAxis& params)
     ax.softLimitPositive  = params.softLimitPositive;
     ax.softLimitNegative  = params.softLimitNegative;
     ax.jogStep            = params.jogStep;
+    ax.homeVelocity       = params.homeVelocity;
+    ax.homeOffset         = params.homeOffset;
 
     // 同步到GNC软限位
     m_controller->setSoftLimit(GNC_CORE_NUM, static_cast<short>(axisId),
@@ -204,7 +209,102 @@ bool MotorManager::updateAxisParams(int axisId, const MotorAxis& params)
     return true;
 }
 
-bool MotorManager::loadParamsFromFile(const QString& filePath)
+// ---- JSON 序列化/反序列化 ----
+
+QJsonObject MotorManager::axisToJson(const MotorAxis& ax) const
+{
+    QJsonObject obj;
+    obj["axisId"]           = ax.axisId;
+    obj["velocity"]         = ax.velocity;
+    obj["acceleration"]     = ax.acceleration;
+    obj["deceleration"]     = ax.deceleration;
+    obj["jogStep"]          = ax.jogStep;
+    obj["leadScrew"]        = ax.leadScrew;
+    obj["pulsePerRev"]      = ax.pulsePerRev;
+    obj["gearRatio"]        = ax.gearRatio;
+    obj["softLimitPositive"] = ax.softLimitPositive;
+    obj["softLimitNegative"] = ax.softLimitNegative;
+    obj["homeVelocity"]     = ax.homeVelocity;
+    obj["homeOffset"]       = ax.homeOffset;
+    return obj;
+}
+
+void MotorManager::jsonToAxis(const QJsonObject& obj, MotorAxis& ax)
+{
+    ax.axisId            = obj["axisId"].toInt(ax.axisId);
+    ax.velocity          = obj["velocity"].toDouble(DEFAULT_VELOCITY);
+    ax.acceleration      = obj["acceleration"].toDouble(DEFAULT_ACCEL);
+    ax.deceleration      = obj["deceleration"].toDouble(DEFAULT_DECEL);
+    ax.jogStep           = obj["jogStep"].toDouble(DEFAULT_JOG_STEP);
+    ax.leadScrew         = obj["leadScrew"].toDouble(DEFAULT_LEAD_SCREW);
+    ax.pulsePerRev       = obj["pulsePerRev"].toInt(DEFAULT_PULSE_PER_REV);
+    ax.gearRatio         = obj["gearRatio"].toDouble(DEFAULT_GEAR_RATIO);
+    ax.softLimitPositive = obj["softLimitPositive"].toDouble(300.0);
+    ax.softLimitNegative = obj["softLimitNegative"].toDouble(0.0);
+    ax.homeVelocity      = obj["homeVelocity"].toDouble(10.0);
+    ax.homeOffset        = obj["homeOffset"].toDouble(0.0);
+}
+
+// ---- 自动加载/保存 ----
+
+QString MotorManager::configFilePath() const
+{
+    return QDir(QCoreApplication::applicationDirPath()).filePath(MOTOR_PARAMS_FILE);
+}
+
+bool MotorManager::atomicWrite(const QString& filePath, const QByteArray& data)
+{
+    QString tmpPath = filePath + ".tmp";
+    // 1. 写入临时文件
+    QFile tmpFile(tmpPath);
+    if (!tmpFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        qWarning() << "MotorManager: 无法写入临时文件" << tmpPath;
+        return false;
+    }
+    qint64 written = tmpFile.write(data);
+    tmpFile.close();
+    if (written != data.size()) {
+        qWarning() << "MotorManager: 临时文件写入不完整" << written << "/" << data.size();
+        QFile::remove(tmpPath);
+        return false;
+    }
+    // 2. 原子替换 (NTFS上rename是原子的)
+    if (QFile::exists(filePath)) {
+        QFile::remove(filePath);
+    }
+    if (!QFile::rename(tmpPath, filePath)) {
+        qWarning() << "MotorManager: rename失败" << tmpPath << "→" << filePath;
+        return false;
+    }
+    qDebug() << "MotorManager: 参数已保存 →" << filePath;
+    return true;
+}
+
+bool MotorManager::autoLoad()
+{
+    QString path = configFilePath();
+    if (!QFile::exists(path)) {
+        qDebug() << "MotorManager: 配置文件不存在, 使用默认参数 →" << path;
+        return false;
+    }
+    return importFromFile(path);
+}
+
+bool MotorManager::autoSave()
+{
+    QJsonObject root;
+    QJsonArray axesArr;
+    for (int i = 0; i < AXIS_COUNT; ++i) {
+        axesArr.append(axisToJson(m_axes[i]));
+    }
+    root["axes"] = axesArr;
+    QByteArray data = QJsonDocument(root).toJson(QJsonDocument::Indented);
+    return atomicWrite(configFilePath(), data);
+}
+
+// ---- 导入/导出 (手动) ----
+
+bool MotorManager::importFromFile(const QString& filePath)
 {
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly)) {
@@ -219,53 +319,24 @@ bool MotorManager::loadParamsFromFile(const QString& filePath)
     QJsonArray axesArr = root["axes"].toArray();
 
     for (int i = 0; i < axesArr.size() && i < AXIS_COUNT; ++i) {
-        QJsonObject axObj = axesArr[i].toObject();
-        MotorAxis ax;
-        ax.axisId           = axObj["axisId"].toInt(i + 1);
-        ax.velocity         = axObj["velocity"].toDouble(DEFAULT_VELOCITY);
-        ax.acceleration     = axObj["acceleration"].toDouble(DEFAULT_ACCEL);
-        ax.deceleration     = axObj["deceleration"].toDouble(DEFAULT_DECEL);
-        ax.leadScrew        = axObj["leadScrew"].toDouble(DEFAULT_LEAD_SCREW);
-        ax.pulsePerRev      = axObj["pulsePerRev"].toInt(DEFAULT_PULSE_PER_REV);
-        ax.gearRatio        = axObj["gearRatio"].toDouble(DEFAULT_GEAR_RATIO);
-        ax.softLimitPositive = axObj["softLimitPositive"].toDouble(300.0);
-        ax.softLimitNegative = axObj["softLimitNegative"].toDouble(0.0);
+        MotorAxis ax = m_axes[i];  // 从当前值开始 (保留未序列化的字段)
+        jsonToAxis(axesArr[i].toObject(), ax);
         updateAxisParams(i + 1, ax);
     }
-    qDebug() << "MotorManager: 参数加载完成, 共" << axesArr.size() << "个轴";
+    qDebug() << "MotorManager: 参数导入完成, 共" << axesArr.size() << "个轴 →" << filePath;
     return true;
 }
 
-bool MotorManager::saveParamsToFile(const QString& filePath)
+bool MotorManager::exportToFile(const QString& filePath)
 {
     QJsonObject root;
     QJsonArray axesArr;
-
     for (int i = 0; i < AXIS_COUNT; ++i) {
-        const MotorAxis& ax = m_axes[i];
-        QJsonObject axObj;
-        axObj["axisId"]           = ax.axisId;
-        axObj["velocity"]         = ax.velocity;
-        axObj["acceleration"]     = ax.acceleration;
-        axObj["deceleration"]     = ax.deceleration;
-        axObj["leadScrew"]        = ax.leadScrew;
-        axObj["pulsePerRev"]      = ax.pulsePerRev;
-        axObj["gearRatio"]        = ax.gearRatio;
-        axObj["softLimitPositive"] = ax.softLimitPositive;
-        axObj["softLimitNegative"] = ax.softLimitNegative;
-        axesArr.append(axObj);
+        axesArr.append(axisToJson(m_axes[i]));
     }
     root["axes"] = axesArr;
-
-    QFile file(filePath);
-    if (!file.open(QIODevice::WriteOnly)) {
-        qWarning() << "MotorManager: 无法写入参数文件" << filePath;
-        return false;
-    }
-    file.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
-    file.close();
-    qDebug() << "MotorManager: 参数保存完成 →" << filePath;
-    return true;
+    QByteArray data = QJsonDocument(root).toJson(QJsonDocument::Indented);
+    return atomicWrite(filePath, data);
 }
 
 // ---- 轮询 ----
@@ -316,12 +387,18 @@ void MotorManager::onPollTimer()
         }
         ax.isMoving = moving;
 
-        // 回零状态
-        if (ax.isHomed == false) {
+        // 回零状态 (仅当回零正在运行或已触发但未结束时检查)
+        if (ax.isHomed == false && ax.isMoving == false) {
+            // isMoving=false 且 isHomed=false 说明: ①从未回零, 或 ②上次回零已结束(成功/失败)
+            // 不再轮询, 等下次 homeRequest 重新触发 → 避免每次 tick 都查 homeSts
+            continue;  // 跳到下一个轴 (for-loop 用 continue 替代 if-else 嵌套不好, 这里应该跳过)
+        }
+        if (ax.isHomed == false && ax.isMoving) {
             TStandardHomeStatus homeSts;
             m_controller->getHomeStatus(GNC_CORE_NUM, axisId, homeSts);
             if (homeSts.run == 0 && homeSts.error == 0 && homeSts.stage == 100) { // STANDARD_HOME_STAGE_END
                 ax.isHomed = true;
+                ax.isMoving = false;
                 ax.currentPosition = 0.0;
                 emit homeFinished(i + 1, true, homeSts.stage);
                 emit positionUpdated(i + 1, 0.0);
