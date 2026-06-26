@@ -250,8 +250,8 @@ void MotorManager::jsonToAxis(const QJsonObject& obj, MotorAxis& ax)
     ax.leadScrew         = obj["leadScrew"].toDouble(DEFAULT_LEAD_SCREW);
     ax.pulsePerRev       = obj["pulsePerRev"].toInt(DEFAULT_PULSE_PER_REV);
     ax.gearRatio         = obj["gearRatio"].toDouble(DEFAULT_GEAR_RATIO);
-    ax.softLimitPositive = obj["softLimitPositive"].toDouble(300.0);
-    ax.softLimitNegative = obj["softLimitNegative"].toDouble(0.0);
+    ax.softLimitPositive = obj["softLimitPositive"].toDouble(9999.0);
+    ax.softLimitNegative = obj["softLimitNegative"].toDouble(-9999.0);
     ax.homeVelocity      = obj["homeVelocity"].toDouble(10.0);
     ax.homeOffset        = obj["homeOffset"].toDouble(0.0);
 }
