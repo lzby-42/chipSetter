@@ -117,7 +117,7 @@ cd tests && qmake tests.pro && make -f Makefile.Debug -j4
 | `models/AlarmRecord.h` | 报警记录数据模型（ID/时间戳/级别/来源/消息/已解决） |
 | `mainwindow.h/.cpp` | 主窗口：创建全部 8 个 Core 模块、11 个 Widget，信号连线总控 |
 | `main.cpp` | 入口：文件日志初始化，QSS 加载 |
-| `googol/` | GTS SDK 文件：gts.h, gts.lib, gts.dll, gt_rn.dll, core1_20261212.cfg |
+| `googol/` | GTS SDK 文件：gts.h, gts.lib, gts.dll, gt_rn.dll, core1_20260625.cfg |
 | `scripts/workflow.ps1` | **统一调度脚本**：编译→打包→部署→启动/停止（test/debug/quick/build 等 7 个命令） |
 | `scripts/build_debug.bat` | 一键编译（双击运行） |
 | `tests/` | 3 个单元测试 |
@@ -384,7 +384,7 @@ StatusBar 模式切换
 ③ 复制 debug/chipSetter.exe
 ④ windeployqt --no-translations --no-compiler-runtime (Qt DLL)
 ⑤ 复制 gdbserver.exe + libgcc_s_dw2-1.dll + libstdc++-6.dll + libwinpthread-1.dll
-⑥ 复制 googol/ (gts.dll, gts.lib, gt_rn.dll, config.h, core1_20261212.cfg)
+⑥ 复制 googol/ (gts.dll, gts.lib, gt_rn.dll, config.h, core1_20260625.cfg)
 ⑦ 复制 Qt plugins/ (platforms/qwindows.dll 等)
 输出: debug_deploy/ (约 90 文件, 118MB)
 ```

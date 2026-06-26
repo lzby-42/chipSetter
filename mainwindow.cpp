@@ -193,6 +193,9 @@ void MainWindow::connectSignals()
                 m_production->onNewAlarm(level, rec.source, rec.message);
             });
 
+    connect(m_alarmLogger, &AlarmLogger::activeCountChanged,
+            m_production, &ProductionWidget::onActiveCountChanged);
+
     connect(m_production, &ProductionWidget::alarmsCleared,
             m_alarmLogger, &AlarmLogger::clearAll);
 
@@ -244,12 +247,9 @@ void MainWindow::connectSignals()
         Q_UNUSED(stepIndex);
     });
 
-    // ProcessManager cycle completed → StatsCollector
+    // ProcessManager cycle completed → StatsCollector (使用权威值, 不自行累加)
     connect(m_processManager, &ProcessManager::cycleCompleted,
-            this, [this](int total) {
-        m_statsCollector->incrementCount();
-        Q_UNUSED(total);
-    });
+            m_statsCollector, &StatsCollector::setCount);
 
     // ===== 电机 (调试界面) =====
     connect(m_motorPtp, &MotorPtpWidget::moveRequested,
@@ -261,6 +261,25 @@ void MainWindow::connectSignals()
     connect(m_motorPtp, &MotorPtpWidget::jogRequested,
             m_motorManager, &MotorManager::jogRequest);
 
+    // 清报警 — 直接调 GncController
+    connect(m_motorPtp, &MotorPtpWidget::clearAlarmRequested,
+            this, [this](int axisId) {
+        m_gncController->clearStatus(GNC_CORE_NUM, static_cast<short>(axisId), 1);
+    });
+
+    // 使能/失能 — 调 MotorManager + 反馈按钮状态
+    connect(m_motorPtp, &MotorPtpWidget::enableRequested,
+            this, [this](int axisId, bool enable) {
+        bool ok;
+        if (enable) {
+            ok = m_motorManager->enableAxis(axisId);
+        } else {
+            ok = m_motorManager->disableAxis(axisId);
+        }
+        // 按实际结果更新按钮
+        m_motorPtp->onAxisEnableChanged(axisId, enable && ok);
+    });
+
     connect(m_motorManager, &MotorManager::positionUpdated,
             m_motorPtp, &MotorPtpWidget::onPositionUpdated);
     connect(m_motorManager, &MotorManager::moveFinished,
@@ -268,14 +287,22 @@ void MainWindow::connectSignals()
     connect(m_motorManager, &MotorManager::homeFinished,
             m_motorPtp, &MotorPtpWidget::onHomeFinished);
 
-    connect(m_motorParam, &MotorParamWidget::paramsUpdateRequested,
-            m_motorManager, &MotorManager::updateAxisParams);
-    connect(m_motorParam, &MotorParamWidget::saveRequested,
-            m_motorManager, &MotorManager::saveParamsToFile);
-    connect(m_motorParam, &MotorParamWidget::loadRequested,
-            m_motorManager, &MotorManager::loadParamsFromFile);
+    // 应用 → 更新参数 + 自动保存
+    connect(m_motorParam, &MotorParamWidget::applyRequested,
+            this, [this](int axisId, const MotorAxis& params) {
+        m_motorManager->updateAxisParams(axisId, params);
+        m_motorManager->autoSave();
+        // 刷新 MotorPtpWidget 的运动参数 spinbox
+    });
+    // 导出
+    connect(m_motorParam, &MotorParamWidget::exportRequested,
+            m_motorManager, &MotorManager::exportToFile);
+    // 导入
+    connect(m_motorParam, &MotorParamWidget::importRequested,
+            m_motorManager, &MotorManager::importFromFile);
+    // 参数更新后通知 UI (刷新spinbox)
     connect(m_motorManager, &MotorManager::axisParamChanged,
-            m_motorParam, &MotorParamWidget::onAxisParamChanged);
+            m_motorParam, &MotorParamWidget::onParamsApplied);
 
     connect(m_motorPtp, &MotorPtpWidget::moveRequested,
             this, [this](int axisId, double, double, double, double) {
@@ -421,9 +448,7 @@ void MainWindow::connectSignals()
     // 步骤参数编辑 → 更新 ProcessManager
     connect(m_production->stepDetailPanel(), &StepDetailPanel::paramEdited,
             this, [this](int stepIndex, const QString& name, double value) {
-        ProcessManager::StepDef def = m_processManager->stepDef(stepIndex);
-        def.defaultParams[name] = value;
-        qDebug() << "[MainWindow] 参数修改: 步骤" << stepIndex << name << "=" << value;
+        m_processManager->setStepParam(stepIndex, name, value);
     });
 }
 
@@ -459,7 +484,7 @@ void MainWindow::initSystem()
     bool cardOk = m_gncController->openCard();
     if (cardOk) {
         m_gncController->netInit("", 120);
-        m_gncController->loadConfig(GNC_CORE_NUM, "googol/core1_20261212.cfg");
+        m_gncController->loadConfig(GNC_CORE_NUM, "googol/core1_20260625.cfg");
         m_gncController->clearStatus(GNC_CORE_NUM, GNC_AXIS_START, AXIS_COUNT);
     } else {
         qCritical() << "[MainWindow] 开卡失败! 请检查硬件连接和驱动";
@@ -469,6 +494,7 @@ void MainWindow::initSystem()
     m_production->setConnectionStatus(m_gncController->isConnected());
 
     m_motorManager->initialize();
+    m_motorManager->autoLoad();   // 加载上次保存的电机参数
     m_dispensingPlatform->initialize();
     m_pickupPlatform->initialize();
     m_processManager->setDispensingPlatform(m_dispensingPlatform);
