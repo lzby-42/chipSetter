@@ -38,13 +38,18 @@ public:
     const MotorAxis& axisState(int axisId) const;
     QVector<MotorAxis> allAxisStates() const;
 
+    // ---- 诊断 ----
+    QString diagnoseAxis(int axisId) const;  // 返回轴详细参数报告
+
     // ---- 信号更新 (来自IO) ----
     void updateAxisSignals(int axisId, bool home, bool limitPos, bool limitNeg);
 
     // ---- 参数管理 ----
     bool updateAxisParams(int axisId, const MotorAxis& params);  // 更新轴参数
-    bool loadParamsFromFile(const QString& filePath);             // 从文件加载参数
-    bool saveParamsToFile(const QString& filePath);               // 保存参数到文件
+    bool autoLoad();                           // 启动时自动加载 exe目录/motor_params.json
+    bool autoSave();                           // 应用时自动保存 (原子写入)
+    bool exportToFile(const QString& filePath);  // 手动导出到指定路径
+    bool importFromFile(const QString& filePath);// 手动从指定路径导入
 
     // ---- 轮询控制 ----
     void startPolling(int intervalMs = 50);     // 开始轮询
@@ -73,6 +78,10 @@ private:
     bool validateMove(int axisId, double targetPos, double vel, double acc, double dec);
     double mmToPulse(int axisId, double mm) const;  // mm → pulse 换算
     double pulseToMm(int axisId, double pulse) const;
+    bool atomicWrite(const QString& filePath, const QByteArray& data);  // 原子写入
+    QString configFilePath() const;                  // exe目录/motor_params.json
+    QJsonObject axisToJson(const MotorAxis& ax) const;
+    void jsonToAxis(const QJsonObject& obj, MotorAxis& ax);
 
     GncController*      m_controller;          // GNC接口 (注入, 不拥有)
     QVector<MotorAxis>   m_axes;                // 13轴状态 (0-based)

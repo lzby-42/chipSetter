@@ -83,6 +83,8 @@ public:
     // ---- 状态读取 ----
     bool getAxisStatus(short core, short axis, long& status, unsigned long& clock);
     bool getProfilePosition(short core, short axis, double& prfPos, unsigned long& clock);
+    bool getEncoderPosition(short core, short axis, double& encPos, unsigned long& clock);
+    bool getAxisError(short core, short axis, double& error, unsigned long& clock);
     bool getLimitInfo(short core, short axis, TLimitInfo& info);
 
     // ---- IO操作 ----

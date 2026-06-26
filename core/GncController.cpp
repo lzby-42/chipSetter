@@ -240,6 +240,20 @@ bool GncController::getProfilePosition(short core, short axis, double& prfPos, u
     return gtsCall("GT_GetPrfPos", rtn) == 0;
 }
 
+bool GncController::getEncoderPosition(short core, short axis, double& encPos, unsigned long& clock)
+{
+    Q_UNUSED(core);
+    short rtn = GT_GetAxisEncPos(axis, &encPos, 1, &clock);
+    return gtsCall("GT_GetAxisEncPos", rtn) == 0;
+}
+
+bool GncController::getAxisError(short core, short axis, double& error, unsigned long& clock)
+{
+    Q_UNUSED(core);
+    short rtn = GT_GetAxisError(axis, &error, 1, &clock);
+    return gtsCall("GT_GetAxisError", rtn) == 0;
+}
+
 bool GncController::getLimitInfo(short core, short axis, TLimitInfo& info)
 {
     Q_UNUSED(core);

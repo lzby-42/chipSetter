@@ -513,6 +513,13 @@ void MainWindow::initSystem()
 
     m_alarmLogger->raiseAlarm(ALARM_LEVEL_INFO, "系统", "系统启动完成");
 
+    // 轴诊断: 打印所有轴的详细参数到日志 (排查编码器/步进配置)
+    qDebug() << "========== AXIS DIAGNOSTICS ==========";
+    for (int i = 1; i <= AXIS_COUNT; ++i) {
+        qDebug().noquote() << m_motorManager->diagnoseAxis(i);
+    }
+    qDebug() << "======================================";
+
     // Initialize process flow bar with step names
     QStringList stepNames = {"初始化", "上料", "定位", "顶晶", "拾取",
                              "点胶", "贴装", "下料", "收尾"};

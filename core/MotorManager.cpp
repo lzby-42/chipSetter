@@ -450,3 +450,68 @@ double MotorManager::pulseToMm(int axisId, double pulse) const
     // mm = pulse * 导程 / (每转脉冲 * 齿轮比)
     return pulse * ax.leadScrew / (ax.pulsePerRev * ax.gearRatio);
 }
+
+// ---- 诊断 ----
+QString MotorManager::diagnoseAxis(int axisId) const
+{
+    if (axisId < 1 || axisId > AXIS_COUNT) return QString("Invalid axis %1").arg(axisId);
+
+    const MotorAxis& ax = m_axes[axisId - 1];
+    QString r;
+
+    // 1. 轴基础参数
+    r += QString("=== Axis %1 (%2) ===\n").arg(axisId).arg(ax.name);
+    r += QString("Enabled: %1 | Moving: %2 | Homed: %3 | Alarm: %4\n")
+         .arg(ax.isEnabled).arg(ax.isMoving).arg(ax.isHomed).arg(ax.isAlarm);
+    r += QString("SoftLimit: [%1, %2] mm\n")
+         .arg(ax.softLimitNegative).arg(ax.softLimitPositive);
+    r += QString("LeadScrew: %1 mm/rev | PulsePerRev: %2 | GearRatio: %3\n")
+         .arg(ax.leadScrew).arg(ax.pulsePerRev).arg(ax.gearRatio);
+    r += QString("Velocity: %1 mm/s | Accel: %2 | Decel: %3\n")
+         .arg(ax.velocity).arg(ax.acceleration).arg(ax.deceleration);
+
+    // 2. GNC 原始状态
+    short s = static_cast<short>(axisId);
+    long status = 0;
+    unsigned long clock = 0;
+    if (m_controller->getAxisStatus(GNC_CORE_NUM, s, status, clock)) {
+        r += QString("GNC Status: 0x%1 (clock=%2)\n").arg(status, 0, 16).arg(clock);
+        r += QString("  bit0(Alarm): %1  bit1(PosLimit): %2  bit2(NegLimit): %3\n")
+             .arg((status>>0)&1).arg((status>>1)&1).arg((status>>2)&1);
+        r += QString("  bit3(Home): %1  bit4(ServoOn): %2  bit10(Motion): %3\n")
+             .arg((status>>3)&1).arg((status>>4)&1).arg((status>>10)&1);
+    } else {
+        r += "GNC Status: READ FAILED\n";
+    }
+
+    // 3. 规划位置 (脉冲指令位置)
+    double prfPos = 0;
+    clock = 0;
+    if (m_controller->getProfilePosition(GNC_CORE_NUM, s, prfPos, clock)) {
+        double prfMm = pulseToMm(axisId, prfPos);
+        r += QString("Profile Pos: %1 pulse (%2 mm)\n").arg(prfPos, 0, 'f', 1).arg(prfMm, 0, 'f', 3);
+    } else {
+        r += "Profile Pos: READ FAILED\n";
+    }
+
+    // 4. 编码器位置 (判断是否有编码器)
+    double encPos = -9999;
+    clock = 0;
+    bool hasEncoder = m_controller->getEncoderPosition(GNC_CORE_NUM, s, encPos, clock);
+    if (hasEncoder) {
+        r += QString("Encoder Pos: %1 pulse (clock=%2)\n").arg(encPos, 0, 'f', 1).arg(clock);
+        r += "  >>> AXIS HAS ENCODER FEEDBACK <<<\n";
+    } else {
+        r += "Encoder Pos: NOT AVAILABLE (no encoder or read error)\n";
+        r += "  >>> AXIS IS PULSE-ONLY (STEPPER, NO ENCODER) <<<\n";
+    }
+
+    // 5. 跟随误差
+    double axisErr = 0;
+    clock = 0;
+    if (m_controller->getAxisError(GNC_CORE_NUM, s, axisErr, clock)) {
+        r += QString("Follow Error: %1 pulse\n").arg(axisErr, 0, 'f', 1);
+    }
+
+    return r;
+}
