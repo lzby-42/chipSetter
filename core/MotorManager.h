@@ -88,6 +88,7 @@ private:
     QVector<MotorAxis>   m_axes;                // 13轴状态 (0-based)
     QTimer*              m_pollTimer;           // 轮询定时器
     bool                 m_polling;
+    bool                 m_homingActive[16];     // 每个轴是否正在回零中
 };
 
 #endif // MOTORMANAGER_H

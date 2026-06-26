@@ -26,6 +26,7 @@ MotorManager::MotorManager(GncController* controller, QObject *parent)
         ax.name   = (i < axisNames.size()) ? axisNames[i] : QString("轴%1").arg(i + 1);
         m_axes[i] = ax;
     }
+    memset(m_homingActive, 0, sizeof(m_homingActive));
 
     // 创建轮询定时器
     m_pollTimer = new QTimer(this);
@@ -141,12 +142,12 @@ void MotorManager::homeRequest(int axisId)
 {
     if (axisId < 1 || axisId > AXIS_COUNT) return;
 
-    // 确保轴已使能 (标准回零API要求)
+    // 尝试使能 (部分步进轴不需要, 失败不阻塞)
     if (!m_axes[axisId - 1].isEnabled) {
-        if (!enableAxis(axisId)) {
-            qWarning() << "MotorManager: 轴" << axisId << "使能失败, 无法回零";
-            emit homeFinished(axisId, false, -1);
-            return;
+        if (enableAxis(axisId)) {
+            qDebug() << "MotorManager: 轴" << axisId << "自动使能成功";
+        } else {
+            qDebug() << "MotorManager: 轴" << axisId << "使能失败(可能无需使能), 继续回零";
         }
     }
 
@@ -167,7 +168,7 @@ void MotorManager::homeRequest(int axisId)
     bool ok = m_controller->executeHome(GNC_CORE_NUM, axis, prm);
     if (ok) {
         m_axes[axisId - 1].isHomed = false;
-        m_axes[axisId - 1].isMoving = true;  // 回零进行中, 轮询将检测完成/失败
+        m_homingActive[axisId - 1] = true;  // 标记回零进行中, 轮询将检测完成/失败
         qDebug() << "MotorManager: 轴" << axisId << "开始回零 mode=" << prm.mode;
     } else {
         qWarning() << "MotorManager: 轴" << axisId << "回零命令发送失败";
@@ -393,37 +394,36 @@ void MotorManager::onPollTimer()
             emit positionUpdated(i + 1, ax.currentPosition);
         }
 
-        // 检测运动完成
-        bool moving = (status & 0x400) != 0;
-        if (ax.isMoving && !moving) {
-            ax.isMoving = false;
-            ax.currentPosition = ax.targetPosition; // 修正到目标
-            emit moveFinished(i + 1, true);
-            emit positionUpdated(i + 1, ax.currentPosition);
-        }
-        ax.isMoving = moving;
-
-        // 回零状态 (仅当回零正在运行或已触发但未结束时检查)
-        if (ax.isHomed == false && ax.isMoving == false) {
-            // isMoving=false 且 isHomed=false 说明: ①从未回零, 或 ②上次回零已结束(成功/失败)
-            // 不再轮询, 等下次 homeRequest 重新触发 → 避免每次 tick 都查 homeSts
-            continue;  // 跳到下一个轴 (for-loop 用 continue 替代 if-else 嵌套不好, 这里应该跳过)
-        }
-        if (ax.isHomed == false && ax.isMoving) {
+        // 回零状态 — 只在主动触发回零期间检查, 避免洪流
+        if (ax.isHomed == false && m_homingActive[axisId - 1]) {
             TStandardHomeStatus homeSts;
             m_controller->getHomeStatus(GNC_CORE_NUM, axisId, homeSts);
-            if (homeSts.run == 0 && homeSts.error == 0 && homeSts.stage == 100) { // STANDARD_HOME_STAGE_END
+            if (homeSts.run == 0 && homeSts.error == 0 && homeSts.stage == 100) {
                 ax.isHomed = true;
                 ax.isMoving = false;
+                m_homingActive[axisId - 1] = false;
                 ax.currentPosition = 0.0;
                 emit homeFinished(i + 1, true, homeSts.stage);
                 emit positionUpdated(i + 1, 0.0);
                 qDebug() << "MotorManager: 轴" << axisId << "回零完成";
-            } else if (homeSts.error != 0) {
+            } else if (homeSts.error != 0 && homeSts.run == 0) {
                 ax.isMoving = false;
+                m_homingActive[axisId - 1] = false;
                 qWarning() << "MotorManager: 轴" << axisId << "回零失败 error=" << homeSts.error << " stage=" << homeSts.stage;
                 emit homeFinished(i + 1, false, homeSts.stage);
             }
+        }
+
+        // 检测点位运动完成 (只在非回零期间)
+        if (!m_homingActive[axisId - 1]) {
+            bool moving = (status & 0x400) != 0;
+            if (ax.isMoving && !moving) {
+                ax.isMoving = false;
+                ax.currentPosition = ax.targetPosition;
+                emit moveFinished(i + 1, true);
+                emit positionUpdated(i + 1, ax.currentPosition);
+            }
+            ax.isMoving = moving;
         }
 
         ax.rawStatus = status;
