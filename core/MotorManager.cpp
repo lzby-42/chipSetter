@@ -77,7 +77,18 @@ bool MotorManager::saveConfigToController(const QString& cfgFile)
 bool MotorManager::enableAxis(int axisId)
 {
     if (axisId < 1 || axisId > AXIS_COUNT) return false;
-    bool ok = m_controller->axisOn(GNC_CORE_NUM, static_cast<short>(axisId));
+    short axis = static_cast<short>(axisId);
+
+    // 先清报警再使能 (cfg加载后轴可能处于报警状态)
+    m_controller->clearStatus(GNC_CORE_NUM, axis, 1);
+
+    bool ok = m_controller->axisOn(GNC_CORE_NUM, axis);
+    if (!ok) {
+        // 使能失败: 尝试断电→清报警→再使能
+        m_controller->axisOff(GNC_CORE_NUM, axis);
+        m_controller->clearStatus(GNC_CORE_NUM, axis, 1);
+        ok = m_controller->axisOn(GNC_CORE_NUM, axis);
+    }
     if (ok) m_axes[axisId - 1].isEnabled = true;
     return ok;
 }
