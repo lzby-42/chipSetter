@@ -5,7 +5,7 @@
 #include "core/HardwareConfig.h"
 
 struct MotorAxis {
-    int     axisId;                 // 轴ID (1~13, 对应GNC SDK索引)
+    int     axisId;                 // 轴ID (1~16, 对应GNC SDK索引)
     QString name;                   // 轴名称
 
     double  currentPosition;        // 当前位置 (mm)
@@ -21,6 +21,8 @@ struct MotorAxis {
 
     double  softLimitPositive;      // 正向软限位 (mm)
     double  softLimitNegative;      // 负向软限位 (mm)
+    double  homeVelocity;           // 回零速度 (pulse/ms)
+    double  homeOffset;             // 回零偏移 (pulse)
 
     bool    isEnabled;              // 轴使能
     bool    isMoving;               // 运动中
@@ -39,7 +41,8 @@ struct MotorAxis {
         , deceleration(DEFAULT_DECEL), jogStep(DEFAULT_JOG_STEP)
         , leadScrew(DEFAULT_LEAD_SCREW), pulsePerRev(DEFAULT_PULSE_PER_REV)
         , gearRatio(DEFAULT_GEAR_RATIO)
-        , softLimitPositive(300.0), softLimitNegative(0.0)
+        , softLimitPositive(9999.0), softLimitNegative(-9999.0)
+        , homeVelocity(10.0), homeOffset(0.0)
         , isEnabled(false), isMoving(false), isHomed(false), isAlarm(false)
         , rawStatus(0)
         , homeSignal(false), limitPositiveSignal(false), limitNegativeSignal(false)
