@@ -207,10 +207,16 @@ void MotorPtpWidget::setMotorManager(MotorManager* mgr)
 void MotorPtpWidget::onAxisButtonClicked(int axisId)
 {
     m_selectedAxisId = axisId;
-    // 更新使能按钮以反映新轴的使能状态
     if (m_motor) {
         const MotorAxis& ax = m_motor->axisState(axisId);
+        // 更新使能按钮
         onAxisEnableChanged(axisId, ax.isEnabled);
+        // 更新当前位置、速度、加速度显示
+        m_currentPosition = ax.currentPosition;
+        m_curPosLabel->setText(QString("%1 mm").arg(ax.currentPosition, 0, 'f', 3));
+        m_velocitySpin->setValue(ax.velocity);
+        m_accelSpin->setValue(ax.acceleration);
+        m_decelSpin->setValue(ax.deceleration);
     }
 }
 
