@@ -54,6 +54,7 @@ public:
     // ---- 轮询控制 ----
     void startPolling(int intervalMs = 50);     // 开始轮询
     void stopPolling();                         // 停止轮询
+    void loadLimitsFromController();            // 从GNC控制器读软限位 (cfg设定值)
 
 public slots:
     // ---- 运动请求 (来自UI) ----

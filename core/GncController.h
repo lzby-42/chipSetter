@@ -91,8 +91,9 @@ public:
     bool readDI(short core, short diType, short diIndex, short* values, short count);
     bool writeDO(short core, short doType, short doIndex, short* values, short count);
 
-    // ---- 软限位 ----
-    bool setSoftLimit(short core, short axis, double positive, double negative);
+    // ---- 软限位 (pulse单位, 由MotorManager做mm→pulse换算) ----
+    bool setSoftLimit(short core, short axis, long posPulse, long negPulse);
+    bool getSoftLimit(short core, short axis, long& posPulse, long& negPulse);
 
 signals:
     void hardwareError(const QString& source, const QString& message);

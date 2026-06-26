@@ -308,12 +308,19 @@ bool GncController::writeDO(short core, short doType, short doIndex, short* valu
 // 软限位
 // ============================================================
 
-bool GncController::setSoftLimit(short core, short axis, double positive, double negative)
+bool GncController::setSoftLimit(short core, short axis, long posPulse, long negPulse)
 {
     Q_UNUSED(core);
-    Q_UNUSED(axis);
-    Q_UNUSED(positive);
-    Q_UNUSED(negative);
-    qDebug() << "[Gnc] setSoftLimit — 运行时修改暂不支持, 请在cfg中配置";
+    if (gtsCall("GT_SetSoftLimit", GT_SetSoftLimit(axis, posPulse, negPulse)) != 0)
+        return false;
+    qDebug() << "[Gnc] setSoftLimit axis=" << axis << " pos=" << posPulse << " neg=" << negPulse << "pulse";
+    return true;
+}
+
+bool GncController::getSoftLimit(short core, short axis, long& posPulse, long& negPulse)
+{
+    Q_UNUSED(core);
+    if (gtsCall("GT_GetSoftLimit", GT_GetSoftLimit(axis, &posPulse, &negPulse)) != 0)
+        return false;
     return true;
 }

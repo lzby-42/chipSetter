@@ -48,6 +48,17 @@ bool MotorManager::initialize()
     return true;
 }
 
+void MotorManager::loadLimitsFromController()
+{
+    for (int i = 1; i <= AXIS_COUNT; ++i) {
+        long posPulse = 0, negPulse = 0;
+        if (m_controller->getSoftLimit(GNC_CORE_NUM, static_cast<short>(i), posPulse, negPulse)) {
+            m_axes[i - 1].softLimitPositive = pulseToMm(i, posPulse);
+            m_axes[i - 1].softLimitNegative = pulseToMm(i, negPulse);
+        }
+    }
+}
+
 bool MotorManager::enableAxis(int axisId)
 {
     if (axisId < 1 || axisId > AXIS_COUNT) return false;
