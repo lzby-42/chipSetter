@@ -184,6 +184,17 @@ void MotorParamWidget::setupUI()
 
 void MotorParamWidget::onAxisButtonClicked(int axisId)
 {
+    // 切轴前先保存当前轴的修改 (自动"应用")
+    if (m_selectedAxisId != axisId && m_motor) {
+        const MotorAxis& cur = m_motor->axisState(m_selectedAxisId);
+        if (m_softLimitPosSpin->value() != cur.softLimitPositive ||
+            m_softLimitNegSpin->value() != cur.softLimitNegative ||
+            m_maxVelocitySpin->value() != cur.velocity ||
+            m_accelSpin->value() != cur.acceleration ||
+            m_decelSpin->value() != cur.deceleration) {
+            onApplyClicked();  // 有改动, 自动保存
+        }
+    }
     m_selectedAxisId = axisId;
     loadAxisFromManager(axisId);
 }
