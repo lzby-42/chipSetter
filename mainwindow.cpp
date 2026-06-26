@@ -294,7 +294,6 @@ void MainWindow::connectSignals()
             this, [this](int axisId, const MotorAxis& params) {
         m_motorManager->updateAxisParams(axisId, params);
         m_motorManager->autoSave();
-        m_motorManager->saveConfigToController("googol/core1_20260625.cfg");  // 持久化到控制器
     });
     // 导出
     connect(m_motorParam, &MotorParamWidget::exportRequested,
