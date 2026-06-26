@@ -236,12 +236,11 @@ bool MotorManager::updateAxisParams(int axisId, const MotorAxis& params)
     ax.jogStep            = params.jogStep;
     ax.homeVelocity       = params.homeVelocity;
     ax.homeOffset         = params.homeOffset;
+    ax.hasLeadScrew       = params.hasLeadScrew;
+    ax.hasSoftLimit       = params.hasSoftLimit;
 
-    // 同步到GNC软限位
-    // 仅在限位非默认宽值时写入控制器 (部分轴不支持软限位, 写了报错7)
-    bool hasLimits = (ax.softLimitPositive > -9990 && ax.softLimitPositive < 9990) ||
-                     (ax.softLimitNegative > -9990 && ax.softLimitNegative < 9990);
-    if (hasLimits) {
+    // 同步到GNC软限位 (仅当轴有软限位时)
+    if (ax.hasSoftLimit) {
         m_controller->setSoftLimit(GNC_CORE_NUM, static_cast<short>(axisId),
                                    mmToPulse(axisId, ax.softLimitPositive),
                                    mmToPulse(axisId, ax.softLimitNegative));
@@ -268,6 +267,8 @@ QJsonObject MotorManager::axisToJson(const MotorAxis& ax) const
     obj["softLimitNegative"] = ax.softLimitNegative;
     obj["homeVelocity"]     = ax.homeVelocity;
     obj["homeOffset"]       = ax.homeOffset;
+    obj["hasLeadScrew"]     = ax.hasLeadScrew;
+    obj["hasSoftLimit"]     = ax.hasSoftLimit;
     return obj;
 }
 
@@ -285,6 +286,8 @@ void MotorManager::jsonToAxis(const QJsonObject& obj, MotorAxis& ax)
     ax.softLimitNegative = obj["softLimitNegative"].toDouble(-9999.0);
     ax.homeVelocity      = obj["homeVelocity"].toDouble(10.0);
     ax.homeOffset        = obj["homeOffset"].toDouble(0.0);
+    ax.hasLeadScrew      = obj["hasLeadScrew"].toBool(true);
+    ax.hasSoftLimit      = obj["hasSoftLimit"].toBool(true);
 }
 
 // ---- 自动加载/保存 ----
@@ -466,11 +469,13 @@ bool MotorManager::validateMove(int axisId, double targetPos, double vel, double
     if (dec <= 0 || dec > MAX_ACCEL) return false;
 
     const MotorAxis& ax = m_axes[axisId - 1];
-    // 软限位检查
-    if (targetPos > ax.softLimitPositive || targetPos < ax.softLimitNegative) {
-        qWarning() << "MotorManager: 轴" << axisId << "目标位置" << targetPos
-                   << "超出软限位 [" << ax.softLimitNegative << "," << ax.softLimitPositive << "]";
-        return false;
+    // 软限位检查 (仅对启用了软限位的轴)
+    if (ax.hasSoftLimit) {
+        if (targetPos > ax.softLimitPositive || targetPos < ax.softLimitNegative) {
+            qWarning() << "MotorManager: 轴" << axisId << "目标位置" << targetPos
+                       << "超出软限位 [" << ax.softLimitNegative << "," << ax.softLimitPositive << "]";
+            return false;
+        }
     }
     return true;
 }
@@ -480,16 +485,14 @@ bool MotorManager::validateMove(int axisId, double targetPos, double vel, double
 double MotorManager::mmToPulse(int axisId, double mm) const
 {
     const MotorAxis& ax = m_axes[axisId - 1];
-    if (ax.leadScrew == 0 || ax.pulsePerRev == 0) return mm;
-    // pulse = mm / 导程 * 每转脉冲 * 齿轮比
+    if (!ax.hasLeadScrew || ax.leadScrew == 0 || ax.pulsePerRev == 0) return mm;
     return mm / ax.leadScrew * ax.pulsePerRev * ax.gearRatio;
 }
 
 double MotorManager::pulseToMm(int axisId, double pulse) const
 {
     const MotorAxis& ax = m_axes[axisId - 1];
-    if (ax.pulsePerRev == 0 || ax.gearRatio == 0) return pulse;
-    // mm = pulse * 导程 / (每转脉冲 * 齿轮比)
+    if (!ax.hasLeadScrew || ax.pulsePerRev == 0 || ax.gearRatio == 0) return pulse;
     return pulse * ax.leadScrew / (ax.pulsePerRev * ax.gearRatio);
 }
 
