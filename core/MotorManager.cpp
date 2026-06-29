@@ -136,10 +136,17 @@ void MotorManager::moveRequest(int axisId, double targetPos, double vel, double 
     // 组装GNC运动参数
     TMoveAbsolutePrmEx prm;
     memset(&prm, 0, sizeof(prm));
-    prm.pos     = mmToPulse(axisId, targetPos);
-    prm.vel     = mmToPulse(axisId, vel) / 1000.0;    // mm/s → pulse/ms
-    prm.acc     = mmToPulse(axisId, acc) / 1000000.0; // mm/s² → pulse/ms²
-    prm.dec     = mmToPulse(axisId, dec) / 1000000.0;
+    prm.pos = mmToPulse(axisId, targetPos);
+    // 有导程: mm/s→pulse/ms; 无导程: 输入即pulse/ms
+    if (ax.hasLeadScrew) {
+        prm.vel = mmToPulse(axisId, vel) / 1000.0;
+        prm.acc = mmToPulse(axisId, acc) / 1000000.0;
+        prm.dec = mmToPulse(axisId, dec) / 1000000.0;
+    } else {
+        prm.vel = vel;      // 旋转轴: 输入即pulse/ms
+        prm.acc = acc;
+        prm.dec = dec;
+    }
     prm.percent = 0;
     prm.velStart = 0;
     prm.velEnd   = 0;
