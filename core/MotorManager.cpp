@@ -200,14 +200,15 @@ void MotorManager::homeRequest(int axisId)
     double hv = ax.homeVelocity > 0 ? mmToPulse(axisId, ax.homeVelocity) / 1000.0 : 10.0;
     prm.velHigh       = hv;
     prm.velLow        = hv * 0.5;
-    prm.acc           = 1.0;
-    prm.dec           = 1.0;
+    prm.acc           = 0.1;    // 与MotionStudio一致
+    prm.dec           = 0.1;
     prm.homeOffset    = static_cast<long>(mmToPulse(axisId, ax.homeOffset));
-    prm.searchHomeDistance    = 0;   // 0=搜索距离不限 (旋转轴必须)
+    prm.searchHomeDistance    = 0;   // 0=搜索距离不限
     prm.searchIndexDistance   = 0;   // 无编码器
-    prm.escapeStep    = 100;
+    prm.escapeStep    = 1;
 
     short axis = static_cast<short>(axisId);
+    m_controller->clearStatus(GNC_CORE_NUM, axis, 1);  // MotionStudio: ClrSts before GoHome
     bool ok = m_controller->executeHome(GNC_CORE_NUM, axis, prm);
     if (ok) {
         ax.isHomed = false;

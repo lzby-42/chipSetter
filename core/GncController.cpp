@@ -170,19 +170,22 @@ bool GncController::zeroPosition(short core, short axis)
 
 bool GncController::moveAbsolute(short core, short axis, const TMoveAbsolutePrmEx& prm)
 {
-    Q_UNUSED(core);
+    // MotionStudio Trap模式: PrfTrap → SetTrapPrm → SetVel → SetPos → Update
     short profile = axis;
     long mask = 1L << (profile - 1);
 
-    // prm.pos/vel/acc 已由 MotorManager 转为 pulse 单位 (mmToPulse), 直接使用
-    long targetPulse = static_cast<long>(prm.pos);
-    double velPulse = prm.vel;
+    if (gtsCall("GTN_PrfTrap", GTN_PrfTrap(core, profile)) != 0) return false;
 
-    if (gtsCall("GT_SetPos", GT_SetPos(profile, targetPulse)) != 0) return false;
-    if (gtsCall("GT_SetVel", GT_SetVel(profile, velPulse)) != 0) return false;
-    if (gtsCall("GT_SetStopDec", GT_SetStopDec(profile, prm.dec, prm.dec * 2.0)) != 0) return false;
-    if (gtsCall("GT_PrfTrap", GT_PrfTrap(profile)) != 0) return false;
-    if (gtsCall("GT_Update", GT_Update(mask)) != 0) return false;
+    TTrapPrm trapPrm;
+    trapPrm.acc        = prm.acc;
+    trapPrm.dec        = prm.dec;
+    trapPrm.velStart   = prm.velStart;
+    trapPrm.smoothTime = 0;
+    if (gtsCall("GTN_SetTrapPrm", GTN_SetTrapPrm(core, profile, &trapPrm)) != 0) return false;
+
+    if (gtsCall("GTN_SetVel", GTN_SetVel(core, profile, prm.vel)) != 0) return false;
+    if (gtsCall("GTN_SetPos", GTN_SetPos(core, profile, static_cast<long>(prm.pos))) != 0) return false;
+    if (gtsCall("GTN_Update", GTN_Update(core, mask)) != 0) return false;
 
     qDebug() << "[Gnc] moveAbsolute axis=" << axis << " pos=" << prm.pos << "pulse";
     return true;
