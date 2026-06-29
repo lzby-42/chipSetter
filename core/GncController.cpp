@@ -225,6 +225,13 @@ bool GncController::setTriggerPrm(short axis, const TTriggerPrm& prm)
     return true;
 }
 
+bool GncController::getTriggerStatus(short axis, TTriggerStatusEx& sts)
+{
+    memset(&sts, 0, sizeof(sts));
+    short rtn = GTN_GetTriggerStatusEx(GNC_CORE_NUM, axis, &sts, 1);
+    return gtsCall("GTN_GetTriggerStatusEx", rtn) == 0;
+}
+
 // ============================================================
 // 状态读取
 // ============================================================

@@ -196,14 +196,63 @@ void MotorManager::homeRequest(int axisId)
         }
     }
 
-    // GTN_GoHome (Smart Home API)
+    short axis = static_cast<short>(axisId);
+    m_controller->clearStatus(GNC_CORE_NUM, axis, 1);
+
+    // mode=20(HOME): 硬件捕获模式 — GTN_SetTriggerPrm + 手动Trap + GetTriggerStatusEx
+    if (ax.homeMode == 20 && ax.triggerIndex > 0) {
+        // Step 1: 配置Trigger — 把GPI映射为硬件捕获源 (微秒级锁存)
+        TTriggerPrm triggerPrm;
+        memset(&triggerPrm, 0, sizeof(triggerPrm));
+        triggerPrm.latchType  = 1;    // MC_ENCODER
+        triggerPrm.latchIndex = 1;
+        triggerPrm.probeType  = 3;    // CAPTURE_PROBE
+        triggerPrm.probeIndex = static_cast<short>(ax.triggerIndex);
+        triggerPrm.sense      = static_cast<short>(ax.homeEdge);
+        triggerPrm.loop       = 0;
+        if (!m_controller->setTriggerPrm(axis, triggerPrm)) {
+            qWarning() << "MotorManager: 轴" << axisId << "Trigger配置失败";
+            emit homeFinished(axisId, false, -1);
+            return;
+        }
+
+        // Step 2: 手动Trap — 往搜索方向持续运动, 等待硬件捕获
+        double hv;
+        if (ax.hasLeadScrew) {
+            hv = ax.homeVelocity > 0 ? mmToPulse(axisId, ax.homeVelocity) / 1000.0 : 10.0;
+        } else {
+            hv = ax.homeVelocity > 0 ? ax.homeVelocity : 10.0;
+        }
+
+        TMoveAbsolutePrmEx prm;
+        memset(&prm, 0, sizeof(prm));
+        long longPos = (ax.homeDir > 0) ? 2147483647L : -2147483647L;  // 极大值 → 持续运动
+        prm.pos     = static_cast<double>(longPos);
+        prm.vel     = hv;
+        prm.acc     = 0.1;
+        prm.dec     = 0.1;
+
+        if (!m_controller->moveAbsolute(GNC_CORE_NUM, axis, prm)) {
+            qWarning() << "MotorManager: 轴" << axisId << "Trap启动失败";
+            emit homeFinished(axisId, false, -1);
+            return;
+        }
+
+        ax.isHomed = false;
+        ax.isMoving = true;
+        m_homingActive[axisId - 1] = true;
+        qDebug() << "MotorManager: 轴" << axisId << "IO捕获回零 GPI=" << ax.triggerIndex
+                 << " dir=" << ax.homeDir << " edge=" << ax.homeEdge;
+        return;
+    }
+
+    // mode=10(LIMIT): GTN_GoHome — 使用cfg配置的限位开关
     THomePrm prm;
     memset(&prm, 0, sizeof(prm));
-    prm.mode          = static_cast<short>(ax.homeMode);          // 10=LIMIT, 20=HOME
-    prm.moveDir       = static_cast<short>(ax.homeDir);           // 搜索方向
-    prm.edge          = static_cast<short>(ax.homeEdge);          // 触发边沿
-    prm.triggerIndex  = static_cast<short>(ax.triggerIndex);      // Home GPI (mode=20)
-    // homeVelocity: 有导程→mm/s转pulse/ms, 无导程→pulse/ms直出
+    prm.mode          = 10;   // HOME_MODE_LIMIT
+    prm.moveDir       = static_cast<short>(ax.homeDir);
+    prm.edge          = static_cast<short>(ax.homeEdge);
+    prm.triggerIndex  = -1;   // 使用本轴cfg限位
     double hv;
     if (ax.hasLeadScrew) {
         hv = ax.homeVelocity > 0 ? mmToPulse(axisId, ax.homeVelocity) / 1000.0 : 10.0;
@@ -212,36 +261,18 @@ void MotorManager::homeRequest(int axisId)
     }
     prm.velHigh       = hv;
     prm.velLow        = hv * 0.5;
-    prm.acc           = 0.1;    // 与MotionStudio一致
+    prm.acc           = 0.1;
     prm.dec           = 0.1;
     prm.homeOffset    = static_cast<long>(mmToPulse(axisId, ax.homeOffset));
-    prm.searchHomeDistance    = 0;   // 0=搜索距离不限
-    prm.searchIndexDistance   = 0;   // 无编码器
+    prm.searchHomeDistance    = 0;
+    prm.searchIndexDistance   = 0;
     prm.escapeStep    = 1;
 
-    short axis = static_cast<short>(axisId);
-
-    // mode=20(HOME_MODE_HOME): 先配Trigger把GPI映射为捕获源
-    if (ax.homeMode == 20 && ax.triggerIndex > 0) {
-        TTriggerPrm triggerPrm;
-        memset(&triggerPrm, 0, sizeof(triggerPrm));
-        triggerPrm.latchType  = 1;  // MC_ENCODER
-        triggerPrm.latchIndex = 1;
-        triggerPrm.probeType  = 3;  // CAPTURE_PROBE
-        triggerPrm.probeIndex = static_cast<short>(ax.triggerIndex);
-        triggerPrm.sense      = static_cast<short>(ax.homeEdge);
-        triggerPrm.loop       = 0;
-        m_controller->setTriggerPrm(axis, triggerPrm);
-    }
-
-    m_controller->clearStatus(GNC_CORE_NUM, axis, 1);  // MotionStudio: ClrSts before GoHome
     bool ok = m_controller->executeHome(GNC_CORE_NUM, axis, prm);
     if (ok) {
         ax.isHomed = false;
         m_homingActive[axisId - 1] = true;
-        qDebug() << "MotorManager: 轴" << axisId << "开始回零 mode=" << prm.mode
-                 << " dir=" << prm.moveDir << " edge=" << prm.edge
-                 << " trigger=" << prm.triggerIndex;
+        qDebug() << "MotorManager: 轴" << axisId << "开始回零 mode=10 dir=" << prm.moveDir;
     } else {
         qWarning() << "MotorManager: 轴" << axisId << "回零命令发送失败";
     }
@@ -499,21 +530,45 @@ void MotorManager::onPollTimer()
 
         // 回零状态 — 只在主动触发回零期间检查
         if (ax.isHomed == false && m_homingActive[axisId - 1]) {
-            THomeStatus homeSts;
-            m_controller->getHomeStatus(GNC_CORE_NUM, axisId, homeSts);
-            if (homeSts.run == 0 && homeSts.error == 0) {
-                ax.isHomed = true;
-                ax.isMoving = false;
-                m_homingActive[axisId - 1] = false;
-                ax.currentPosition = 0.0;
-                emit homeFinished(i + 1, true, homeSts.stage);
-                emit positionUpdated(i + 1, 0.0);
-                qDebug() << "MotorManager: 轴" << axisId << "回零完成";
-            } else if (homeSts.error != 0 && homeSts.run == 0) {
-                ax.isMoving = false;
-                m_homingActive[axisId - 1] = false;
-                qWarning() << "MotorManager: 轴" << axisId << "回零失败 error=" << homeSts.error << " stage=" << homeSts.stage;
-                emit homeFinished(i + 1, false, homeSts.stage);
+            if (ax.homeMode == 20) {
+                // IO捕获模式: 等待硬件锁存 → Stop → ZeroPos
+                TTriggerStatusEx trigSts;
+                if (m_controller->getTriggerStatus(axisId, trigSts) && trigSts.done) {
+                    // 捕获成功! 停 + 清零
+                    m_controller->stopMove(GNC_CORE_NUM, axisId);
+                    ax.isHomed = true;
+                    ax.isMoving = false;
+                    m_homingActive[axisId - 1] = false;
+                    ax.currentPosition = 0.0;
+                    m_controller->zeroPosition(GNC_CORE_NUM, axisId);
+                    emit homeFinished(i + 1, true, 0);
+                    emit positionUpdated(i + 1, 0.0);
+                    qDebug() << "MotorManager: 轴" << axisId << "IO捕获回零完成 latchPos=" << trigSts.position;
+                } else if (!(status & 0x400) && ax.isMoving) {
+                    // 运动停了但没捕获 → 失败
+                    ax.isMoving = false;
+                    m_homingActive[axisId - 1] = false;
+                    qWarning() << "MotorManager: 轴" << axisId << "IO回零失败: 未捕获到信号";
+                    emit homeFinished(i + 1, false, -1);
+                }
+            } else {
+                // mode=10(LIMIT): GTN_GoHome状态检测
+                THomeStatus homeSts;
+                m_controller->getHomeStatus(GNC_CORE_NUM, axisId, homeSts);
+                if (homeSts.run == 0 && homeSts.error == 0) {
+                    ax.isHomed = true;
+                    ax.isMoving = false;
+                    m_homingActive[axisId - 1] = false;
+                    ax.currentPosition = 0.0;
+                    emit homeFinished(i + 1, true, homeSts.stage);
+                    emit positionUpdated(i + 1, 0.0);
+                    qDebug() << "MotorManager: 轴" << axisId << "回零完成";
+                } else if (homeSts.error != 0 && homeSts.run == 0) {
+                    ax.isMoving = false;
+                    m_homingActive[axisId - 1] = false;
+                    qWarning() << "MotorManager: 轴" << axisId << "回零失败 error=" << homeSts.error << " stage=" << homeSts.stage;
+                    emit homeFinished(i + 1, false, homeSts.stage);
+                }
             }
         }
 
