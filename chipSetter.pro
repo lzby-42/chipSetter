@@ -24,8 +24,6 @@ SOURCES += \
     core/PickupPlatformController.cpp \
     widgets/StatusBarWidget.cpp \
     widgets/MotorControlWidget.cpp \
-    widgets/MotorPtpWidget.cpp \
-    widgets/MotorParamWidget.cpp \
     widgets/IoMonitorWidget.cpp \
     widgets/AlarmListWidget.cpp \
     widgets/StatsWidget.cpp \
@@ -51,8 +49,6 @@ HEADERS += \
     core/PickupPlatformController.h \
     widgets/StatusBarWidget.h \
     widgets/MotorControlWidget.h \
-    widgets/MotorPtpWidget.h \
-    widgets/MotorParamWidget.h \
     widgets/IoMonitorWidget.h \
     widgets/AlarmListWidget.h \
     widgets/StatsWidget.h \
