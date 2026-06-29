@@ -215,6 +215,16 @@ bool GncController::getHomeStatus(short core, short axis, THomeStatus& sts)
                    GTN_GetHomeStatus(core, axis, &sts)) == 0;
 }
 
+bool GncController::setTriggerPrm(short axis, const TTriggerPrm& prm)
+{
+    TTriggerPrm p = prm;
+    short rtn = GTN_SetTriggerPrm(GNC_CORE_NUM, axis, &p);
+    if (gtsCall("GTN_SetTriggerPrm", rtn) != 0) return false;
+    qDebug() << "[Gnc] setTriggerPrm axis=" << axis << " probeIndex=" << prm.probeIndex
+             << " sense=" << prm.sense;
+    return true;
+}
+
 // ============================================================
 // 状态读取
 // ============================================================

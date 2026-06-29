@@ -203,8 +203,13 @@ void MotorManager::homeRequest(int axisId)
     prm.moveDir       = static_cast<short>(ax.homeDir);           // 搜索方向
     prm.edge          = static_cast<short>(ax.homeEdge);          // 触发边沿
     prm.triggerIndex  = static_cast<short>(ax.triggerIndex);      // Home GPI (mode=20)
-    // homeVelocity 单位 mm/s → 转为 pulse/ms (与moveRequest一致)
-    double hv = ax.homeVelocity > 0 ? mmToPulse(axisId, ax.homeVelocity) / 1000.0 : 10.0;
+    // homeVelocity: 有导程→mm/s转pulse/ms, 无导程→pulse/ms直出
+    double hv;
+    if (ax.hasLeadScrew) {
+        hv = ax.homeVelocity > 0 ? mmToPulse(axisId, ax.homeVelocity) / 1000.0 : 10.0;
+    } else {
+        hv = ax.homeVelocity > 0 ? ax.homeVelocity : 10.0;
+    }
     prm.velHigh       = hv;
     prm.velLow        = hv * 0.5;
     prm.acc           = 0.1;    // 与MotionStudio一致
@@ -215,6 +220,20 @@ void MotorManager::homeRequest(int axisId)
     prm.escapeStep    = 1;
 
     short axis = static_cast<short>(axisId);
+
+    // mode=20(HOME_MODE_HOME): 先配Trigger把GPI映射为捕获源
+    if (ax.homeMode == 20 && ax.triggerIndex > 0) {
+        TTriggerPrm triggerPrm;
+        memset(&triggerPrm, 0, sizeof(triggerPrm));
+        triggerPrm.latchType  = 1;  // MC_ENCODER
+        triggerPrm.latchIndex = 1;
+        triggerPrm.probeType  = 3;  // CAPTURE_PROBE
+        triggerPrm.probeIndex = static_cast<short>(ax.triggerIndex);
+        triggerPrm.sense      = static_cast<short>(ax.homeEdge);
+        triggerPrm.loop       = 0;
+        m_controller->setTriggerPrm(axis, triggerPrm);
+    }
+
     m_controller->clearStatus(GNC_CORE_NUM, axis, 1);  // MotionStudio: ClrSts before GoHome
     bool ok = m_controller->executeHome(GNC_CORE_NUM, axis, prm);
     if (ok) {

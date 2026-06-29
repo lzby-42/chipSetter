@@ -79,6 +79,7 @@ public:
     // ---- 回零 ----
     bool executeHome(short core, short axis, const THomePrm& prm);  // GTN_GoHome
     bool getHomeStatus(short core, short axis, THomeStatus& sts);
+    bool setTriggerPrm(short axis, const TTriggerPrm& prm);         // GPI→捕获源映射
 
     // ---- 状态读取 ----
     bool getAxisStatus(short core, short axis, long& status, unsigned long& clock);
