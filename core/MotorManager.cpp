@@ -240,11 +240,15 @@ bool MotorManager::updateAxisParams(int axisId, const MotorAxis& params)
     ax.hasSoftLimitPositive = params.hasSoftLimitPositive;
     ax.hasSoftLimitNegative = params.hasSoftLimitNegative;
 
-    // 同步到GNC软限位 (仅当轴有对应软限位时)
-    if (ax.hasSoftLimitPositive || ax.hasSoftLimitNegative) {
-        m_controller->setSoftLimit(GNC_CORE_NUM, static_cast<short>(axisId),
-                                   mmToPulse(axisId, ax.softLimitPositive),
-                                   mmToPulse(axisId, ax.softLimitNegative));
+    // 同步到GNC软限位 (未启用的方向发送极大值, 硬件永不触发)
+    {
+        long posPulse = ax.hasSoftLimitPositive
+            ? mmToPulse(axisId, ax.softLimitPositive)
+            :  2147483647L;  // MAX_LONG/2 — 硬件永不触发
+        long negPulse = ax.hasSoftLimitNegative
+            ? mmToPulse(axisId, ax.softLimitNegative)
+            : -2147483647L;
+        m_controller->setSoftLimit(GNC_CORE_NUM, static_cast<short>(axisId), posPulse, negPulse);
     }
 
     emit axisParamChanged(axisId);

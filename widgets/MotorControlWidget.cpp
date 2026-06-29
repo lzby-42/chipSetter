@@ -295,6 +295,7 @@ void MotorControlWidget::loadAxisFromManager(int axisId)
     m_velocitySpin->setValue(ax.velocity);
     m_accelSpin->setValue(ax.acceleration);
     m_decelSpin->setValue(ax.deceleration);
+    m_jogStepSpin->setValue(ax.jogStep);
     m_leadScrewCheck->setChecked(ax.hasLeadScrew);
     m_softLimitPosCheck->setChecked(ax.hasSoftLimitPositive);
     m_softLimitNegCheck->setChecked(ax.hasSoftLimitNegative);

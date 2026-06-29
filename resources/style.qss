@@ -28,8 +28,7 @@ QWidget {
  */
 
 QWidget#StatusBarWidget,
-QWidget#MotorPtpWidget,
-QWidget#MotorParamWidget,
+QWidget#MotorControlWidget,
 QWidget#IoMonitorWidget,
 QWidget#AlarmListWidget,
 QWidget#StatsWidget,
