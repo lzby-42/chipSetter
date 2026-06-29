@@ -45,6 +45,7 @@ public slots:
 
     // Alarms (backward compatible)
     void onNewAlarm(const QString& level, const QString& source, const QString& msg);
+    void onActiveCountChanged(int count);
     void onClearAlarms();
 
 signals:

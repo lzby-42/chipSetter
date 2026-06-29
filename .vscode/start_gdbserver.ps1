@@ -68,14 +68,25 @@ gdbserver.exe --once 0.0.0.0:$port chipSetter.exe 1> "%TEMP%\gdb_stdout.txt" 2> 
             Write-Host "Batch: $batchPath"
             Get-Content $batchPath | ForEach-Object { Write-Host "  $_" }
 
-            # Schedule 30s in the future and WAIT for scheduler to fire.
-            # Do NOT use schtasks /run — it ignores /it and runs in Session 0 (no GUI).
-            $startTime = (Get-Date).AddSeconds(30).ToString("HH:mm:ss")
-            schtasks /delete /tn $taskName /f 2>$null
-            $createOut = schtasks /create /tn $taskName /tr "cmd /c `"$batchPath`"" /sc once /st $startTime /it /f 2>&1
-            Write-Host "SchTasks Create: $createOut"
-            Write-Host "Waiting for scheduler to fire at $startTime (NO /run — preserve /it for Session 1)..."
-            Start-Sleep -Seconds 35
+            # Polling approach: schtasks scheduler fires at unpredictable times.
+            # Poll for gdbserver port every 3s for up to 120s instead of blind sleep.
+            # 1. 删除旧任务
+            $null = schtasks /delete /tn $taskName /f 2>&1
+            # 2. 创建任务（开始时间随便写个过去的就行，反正我们手动触发）
+            $null = schtasks /create /tn $taskName /tr "cmd /c `"$batchPath`"" /sc once /st 00:00 /it /f 2>&1
+            # 3. 【核心加速】立即手动触发任务运行！
+            $null = schtasks /run /tn $taskName
+            Write-Host "Task triggered immediately, polling for gdbserver..."
+            
+            $portOpen = $false
+            $deadline = (Get-Date).AddSeconds(120)
+            while (-not $portOpen -and (Get-Date) -lt $deadline) {
+                Start-Sleep -Seconds 3
+                $portCheck = netstat -ano 2>$null | Select-String "0.0.0.0:$port.*LISTENING"
+                if ($portCheck) { $portOpen = $true }
+                if (-not $portOpen) { Write-Host -NoNewline "." }
+            }
+            Write-Host ""
 
             # Check log files for error messages
             @("$env:TEMP\gdb_stdout.txt", "$env:TEMP\gdb_stderr.txt") | ForEach-Object {
@@ -86,8 +97,7 @@ gdbserver.exe --once 0.0.0.0:$port chipSetter.exe 1> "%TEMP%\gdb_stdout.txt" 2> 
                 }
             }
 
-            $portCheck = (netstat -ano | Select-String "0.0.0.0:$port.*LISTENING")
-            if ($portCheck) {
+            if ($portOpen) {
                 Write-Host "[OK] gdbserver listening on $port" -ForegroundColor Green
             } else {
                 Write-Host "[WARN] Port $port not listening" -ForegroundColor Yellow
@@ -108,8 +118,8 @@ function Start-ViaPsExec {
     Write-Host "[Method 2] Trying PsExec..." -ForegroundColor Yellow
     $psexec = $null
     $locations = @(
+        "D:\tool\Sysinternals\PsExec.exe",
         "D:\Sysinternals\PsExec.exe",
-        "C:\Sysinternals\PsExec.exe",
         "PsExec.exe"
     )
     foreach ($loc in $locations) {

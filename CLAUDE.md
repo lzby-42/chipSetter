@@ -9,7 +9,9 @@ Qt 5.15.2 C++ 上位机，运行于固高 GNC-C610 工控机 (Win10, 192.168.1.2
 ## 最重要的事
 
 1. **不要直接 include gts.h**：只有 `GncController.h` 才 include，其他文件通过 `GncController` 类访问硬件
-2. **日志位置**：工作目录下的 `chipsetter_debug.log`
+2. **日志位置**：`logs/chipsetter_年月日_时分秒.log`（每次启动生成新文件，自动创建logs目录）
+3. **电机参数持久化**：`motor_params.json`（exe同目录），启动自动加载，点击"应用"自动保存（写临时文件+rename防断电）
+4. **轴参数适用性**：旋转轴/曲柄可取消导程勾选，气缸轴可取消软限位勾选，JSON持久化
 
 ## 硬件架构
 

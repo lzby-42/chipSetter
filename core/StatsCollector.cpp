@@ -62,6 +62,12 @@ void StatsCollector::reset()
     emit statsUpdated(m_totalCount, runningHours(), cycleTimeSec());
 }
 
+void StatsCollector::setCount(int count)
+{
+    m_totalCount = count;
+    emit statsUpdated(m_totalCount, runningHours(), cycleTimeSec());
+}
+
 void StatsCollector::incrementCount()
 {
     m_totalCount++;

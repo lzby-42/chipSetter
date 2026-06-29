@@ -56,6 +56,7 @@ public:
     StepState stepState(int stepIndex) const;
     int currentStep() const;
     const StepDef& stepDef(int stepIndex) const;
+    void setStepParam(int stepIndex, const QString& name, double value);
     QVector<StepDef> allSteps() const;
     bool isRunning() const;
     bool isPaused() const;

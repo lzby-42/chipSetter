@@ -1,11 +1,9 @@
 # ============================================================
 #  chipSetter direct launch (no gdbserver) — for real-machine testing
 #
-#  Unlike start_gdbserver.ps1, this launches chipSetter.exe DIRECTLY
-#  without gdbserver.  gdbserver suspends the process at startup and
-#  waits for gdb to connect — without gdb, Qt never creates windows
-#  (MainWindowHandle=0).  Use this script for testing; use
-#  start_gdbserver.ps1 for F5 debugging.
+#  Methods (tried in order):
+#    1. PsExec -i  (precise, no scheduler delay)
+#    2. WinRM + schtasks /it  (fallback, ~0-2min scheduler delay)
 # ============================================================
 param(
     [string]$TargetIp = "192.168.1.2",
@@ -21,86 +19,137 @@ Write-Host "  Target: $TargetIp"                      -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
-# ---- Build credential ----
-$credFile = "$env:USERPROFILE\.chipsetter_cred.xml"
-$cred = $null
+# ============================================================
+# Method 1: PsExec (precise, no scheduler delay)
+# ============================================================
+function Start-ViaPsExec {
+    Write-Host "[Method 1] Trying PsExec..." -ForegroundColor Yellow
 
-if (Test-Path $credFile) {
+    $psexec = $null
+    $locations = @(
+        "D:\tool\Sysinternals\PsExec.exe",
+        "D:\Sysinternals\PsExec.exe",
+        "PsExec.exe"
+    )
+    foreach ($loc in $locations) {
+        if (Test-Path $loc) { $psexec = $loc; break }
+    }
+    if (-not $psexec) {
+        Write-Host "[SKIP] PsExec not found." -ForegroundColor Yellow
+        return $false
+    }
+
     try {
-        $cred = Import-Clixml -Path $credFile
-        Write-Host "[OK] Loaded credential" -ForegroundColor Green
+        # Accept EULA (one-time per user)
+        $null = & $psexec -accepteula 2>&1
+
+        # Kill old, then launch directly via PsExec
+        $cmd = "taskkill /f /im chipSetter.exe 2>nul & taskkill /f /im gdbserver.exe 2>nul & cd /d `"$RemoteExeDir`" & start `"`" chipSetter.exe"
+        & $psexec "\\$TargetIp" -i -d cmd /c $cmd 2>&1 | Out-Null
+
+        # Verify
+        Start-Sleep -Seconds 2
+        $credFile = "$env:USERPROFILE\.chipsetter_cred.xml"
+        if (Test-Path $credFile) {
+            $cred = Import-Clixml -Path $credFile
+            $session = New-PSSession -ComputerName $TargetIp -Credential $cred -ErrorAction SilentlyContinue
+            if ($session) {
+                $alive = Invoke-Command -Session $session -ScriptBlock {
+                    $p = Get-Process -Name 'chipSetter' -ErrorAction SilentlyContinue
+                    if ($p) { Write-Output "PID=$($p.Id) Sess=$($p.SessionId) HWND=$($p.MainWindowHandle)" }
+                }
+                Remove-PSSession $session
+                if ($alive) {
+                    Write-Host "[OK] chipSetter running — $alive" -ForegroundColor Green
+                    return $true
+                }
+            }
+        }
+        Write-Host "[WARN] Could not verify process (may still be starting)" -ForegroundColor Yellow
+        return $true
     } catch {
-        Write-Host "[ERROR] Credential file corrupted" -ForegroundColor Red
-        exit 1
+        Write-Host "[SKIP] PsExec failed: $_" -ForegroundColor Yellow
+        return $false
     }
 }
 
-if (-not $cred) {
-    Write-Host "[ERROR] No credential found. Run start_gdbserver.ps1 first." -ForegroundColor Red
-    exit 1
-}
+# ============================================================
+# Method 2: WinRM + schtasks /it (fallback)
+# ============================================================
+function Start-ViaSchtasks {
+    Write-Host "[Method 2] Trying WinRM + schtasks..." -ForegroundColor Yellow
 
-# ---- Launch via WinRM + schtasks ----
-try {
-    $session = New-PSSession -ComputerName $TargetIp -Credential $cred -ErrorAction Stop
+    $credFile = "$env:USERPROFILE\.chipsetter_cred.xml"
+    if (-not (Test-Path $credFile)) {
+        Write-Host "[SKIP] No credential" -ForegroundColor Yellow
+        return $false
+    }
+    $cred = Import-Clixml -Path $credFile
 
-    Invoke-Command -Session $session -ScriptBlock {
-        param($dir)
+    try {
+        $session = New-PSSession -ComputerName $TargetIp -Credential $cred -ErrorAction Stop
 
-        # Kill old instances
-        Get-Process -Name 'chipSetter','gdbserver' -ErrorAction SilentlyContinue | Stop-Process -Force
-        schtasks /delete /tn "chipSetter-direct" /f 2>$null
-        schtasks /delete /tn "chipSetter-gdbserver" /f 2>$null
-        Start-Sleep -Seconds 2
+        Invoke-Command -Session $session -ScriptBlock {
+            param($dir)
 
-        # Write batch file that launches chipSetter directly
-        $batch = "$env:TEMP\chipsetter_direct.bat"
-        @"
+            Get-Process -Name 'chipSetter','gdbserver' -ErrorAction SilentlyContinue | Stop-Process -Force
+            $null = schtasks /delete /tn "chipSetter-direct" /f 2>&1
+            Start-Sleep -Seconds 2
+
+            $batch = "$env:TEMP\chipsetter_direct.bat"
+            @"
 @echo off
 set "PATH=$dir;%PATH%"
 cd /d "$dir"
 start "chipSetter" chipSetter.exe
 "@ | Out-File -Encoding ASCII -FilePath $batch
 
-        Write-Host "Batch: $batch"
-        Get-Content $batch | ForEach-Object { Write-Host "  $_" }
+            $startTime = (Get-Date).AddMinutes(1).ToString("HH:mm:ss")
+            $null = schtasks /create /tn "chipSetter-direct" /tr "cmd /c `"$batch`"" /sc once /st $startTime /it /f 2>&1
+            Write-Host "Task scheduled, polling..."
 
-        # Schedule 10s in future, wait for scheduler to fire (NO /run — preserves /it)
-        $startTime = (Get-Date).AddSeconds(30).ToString("HH:mm:ss")
-        $taskName = "chipSetter-direct"
-        $null = schtasks /create /tn $taskName /tr "cmd /c `"$batch`"" /sc once /st $startTime /it /f 2>&1
-        Write-Host "Task scheduled at $startTime, waiting for scheduler..."
-        Start-Sleep -Seconds 35
-
-        # Check result
-        $chip = Get-Process -Name 'chipSetter' -ErrorAction SilentlyContinue
-        if ($chip) {
-            Start-Sleep -Seconds 3
-            $chip.Refresh()
-            Write-Host "`n[OK] chipSetter PID=$($chip.Id) Session=$($chip.SessionId)" -ForegroundColor Green
-            Write-Host "     Handle=$($chip.MainWindowHandle) Title='$($chip.MainWindowTitle)'"
-            if ($chip.MainWindowHandle -ne 0) {
-                Write-Host "     >>> Window visible on GNC desktop <<<" -ForegroundColor Green
-            } else {
-                Write-Host "     [WARN] No window handle (is user logged into GNC?)" -ForegroundColor Yellow
+            $chip = $null
+            $deadline = (Get-Date).AddSeconds(120)
+            while (-not $chip -and (Get-Date) -lt $deadline) {
+                Start-Sleep -Seconds 3
+                $chip = Get-Process -Name 'chipSetter' -ErrorAction SilentlyContinue
+                if (-not $chip) { Write-Host -NoNewline "." }
             }
-        } else {
-            Write-Host "[FAIL] chipSetter.exe did not start" -ForegroundColor Red
-        }
+            Write-Host ""
 
-        # Cleanup task
-        schtasks /delete /tn $taskName /f 2>$null
+            if ($chip) {
+                $chip.Refresh()
+                Write-Host "[OK] chipSetter PID=$($chip.Id)" -ForegroundColor Green
+                if ($chip.MainWindowHandle -ne 0) {
+                    Write-Host "     Window visible on GNC desktop" -ForegroundColor Green
+                }
+            } else {
+                Write-Host "[FAIL] chipSetter not started within 120s" -ForegroundColor Red
+            }
 
-    } -ArgumentList $RemoteExeDir -ErrorAction Stop
+            $null = schtasks /delete /tn "chipSetter-direct" /f 2>&1
 
-    Remove-PSSession $session
+        } -ArgumentList $RemoteExeDir -ErrorAction Stop
 
-} catch {
-    Write-Host "[ERROR] WinRM failed: $_" -ForegroundColor Red
-    Write-Host ""
-    Write-Host "Manual launch on GNC (${TargetIp}):" -ForegroundColor Yellow
-    Write-Host "  cd C:\Users\googol\Desktop\share\chipSetter" -ForegroundColor Cyan
-    Write-Host "  chipSetter.exe" -ForegroundColor Cyan
+        Remove-PSSession $session
+        return $true
+
+    } catch {
+        Write-Host "[SKIP] WinRM/schtasks failed: $_" -ForegroundColor Yellow
+        return $false
+    }
+}
+
+# ============================================================
+# Main
+# ============================================================
+$success = $false
+if (-not $success) { $success = Start-ViaSchtasks }
+if (-not $success) { $success = Start-ViaPsExec }
+
+if (-not $success) {
+    Write-Host "[FAIL] All methods failed." -ForegroundColor Red
+    Write-Host "Manual: cd C:\Users\googol\Desktop\share\chipSetter && chipSetter.exe" -ForegroundColor Yellow
     exit 1
 }
 

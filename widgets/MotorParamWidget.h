@@ -17,6 +17,7 @@
 #include <QLabel>
 #include <QDoubleSpinBox>
 #include <QSpinBox>
+#include <QCheckBox>
 #include <QButtonGroup>
 #include "models/MotorAxis.h"
 
@@ -66,6 +67,9 @@ private:
     QDoubleSpinBox*  m_softLimitNegSpin;
     QDoubleSpinBox*  m_homeVelSpin;
     QDoubleSpinBox*  m_homeOffsetSpin;
+
+    QCheckBox*       m_leadScrewCheck;    // 有导程 (控制导程/脉冲/齿轮比)
+    QCheckBox*       m_softLimitCheck;    // 有软限位 (控制软限位+/软限位-)
 };
 
 #endif // MOTORPARAMWIDGET_H

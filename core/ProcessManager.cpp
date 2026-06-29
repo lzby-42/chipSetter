@@ -174,6 +174,13 @@ QVector<ProcessManager::StepDef> ProcessManager::allSteps() const
     return m_steps;
 }
 
+void ProcessManager::setStepParam(int stepIndex, const QString& name, double value)
+{
+    if (stepIndex < 0 || stepIndex >= STEP_COUNT) return;
+    m_steps[stepIndex].defaultParams[name] = value;
+    qDebug() << "[ProcessManager] 参数修改: 步骤" << stepIndex << name << "=" << value;
+}
+
 bool ProcessManager::isRunning() const { return m_running; }
 bool ProcessManager::isPaused() const  { return m_paused; }
 int  ProcessManager::cycleCount() const { return m_cycleCount; }

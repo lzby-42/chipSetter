@@ -63,6 +63,8 @@ void AlarmListWidget::setupUI()
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_table->setShowGrid(false);
     m_table->setFocusPolicy(Qt::NoFocus);
+    m_table->setWordWrap(true);
+    m_table->setTextElideMode(Qt::ElideNone);
     m_table->setStyleSheet(
         "QTableWidget { background:#1a1a2e; border:1px solid #333; border-radius:2px; "
         "gridline-color:#222; font-size:9px; }"
@@ -118,17 +120,13 @@ void AlarmListWidget::onNewAlarm(AlarmRecord record)
     m_table->setItem(0, 1, levelItem);
     m_table->setItem(0, 2, srcItem);
     m_table->setItem(0, 3, msgItem);
-    m_table->setRowHeight(0, 20);
+    m_table->resizeRowToContents(0);
 
     // 限制最多 200 条
     while (m_table->rowCount() > 200) {
         m_table->removeRow(m_table->rowCount() - 1);
     }
-
-    if (!record.resolved) {
-        m_activeCount++;
-        updateCountBadge();
-    }
+    // 计数由 activeCountChanged 统一同步, 不自行累加
 }
 
 void AlarmListWidget::onAlarmResolved(int alarmId)
@@ -146,10 +144,7 @@ void AlarmListWidget::onAlarmResolved(int alarmId)
         }
         break;
     }
-    if (m_activeCount > 0) {
-        m_activeCount--;
-        updateCountBadge();
-    }
+    // 计数由 activeCountChanged 统一同步, 不自行递减
 }
 
 void AlarmListWidget::onActiveCountChanged(int count)

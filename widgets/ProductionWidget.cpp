@@ -227,8 +227,7 @@ void ProductionWidget::updateAxisStates(const QVector<int>& enabledAxes,
 
 void ProductionWidget::onNewAlarm(const QString& level, const QString& source, const QString& msg)
 {
-    m_alarmCount++;
-    m_alarmBadge->setText(QString::number(m_alarmCount));
+    // 计数由 activeCountChanged 统一同步, 不自行累加
     m_alarmBadge->setStyleSheet(
         "background:#b71c1c; color:#fff; padding:2px 10px;"
         "border-radius:10px; font-size:12px; font-weight:bold;");
@@ -257,6 +256,21 @@ void ProductionWidget::onNewAlarm(const QString& level, const QString& source, c
 
     m_alarmList->setText(lines.join("<br>"));
     m_alarmList->setTextFormat(Qt::RichText);
+}
+
+void ProductionWidget::onActiveCountChanged(int count)
+{
+    m_alarmCount = count;
+    m_alarmBadge->setText(QString::number(count));
+    if (count == 0) {
+        m_alarmBadge->setStyleSheet(
+            "background:#37474f; color:#90a4ae; padding:2px 10px;"
+            "border-radius:10px; font-size:12px; font-weight:bold;");
+    } else {
+        m_alarmBadge->setStyleSheet(
+            "background:#b71c1c; color:#fff; padding:2px 10px;"
+            "border-radius:10px; font-size:12px; font-weight:bold;");
+    }
 }
 
 void ProductionWidget::onClearAlarms()

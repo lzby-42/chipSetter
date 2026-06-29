@@ -23,6 +23,9 @@ struct MotorAxis {
     double  softLimitNegative;      // 负向软限位 (mm)
     double  homeVelocity;           // 回零速度 (pulse/ms)
     double  homeOffset;             // 回零偏移 (pulse)
+    bool    hasLeadScrew;           // 是否有导程 (旋转轴/曲柄=false)
+    bool    hasSoftLimitPositive;   // 是否启用正向软限位
+    bool    hasSoftLimitNegative;   // 是否启用负向软限位
 
     bool    isEnabled;              // 轴使能
     bool    isMoving;               // 运动中
@@ -43,6 +46,7 @@ struct MotorAxis {
         , gearRatio(DEFAULT_GEAR_RATIO)
         , softLimitPositive(9999.0), softLimitNegative(-9999.0)
         , homeVelocity(10.0), homeOffset(0.0)
+        , hasLeadScrew(true), hasSoftLimitPositive(true), hasSoftLimitNegative(true)
         , isEnabled(false), isMoving(false), isHomed(false), isAlarm(false)
         , rawStatus(0)
         , homeSignal(false), limitPositiveSignal(false), limitNegativeSignal(false)

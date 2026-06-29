@@ -89,15 +89,20 @@ void MotorParamWidget::setupUI()
     grid->setVerticalSpacing(6);
 
     auto addRow = [&](int row, const QString& label,
-                      QWidget* editor, const QString& unit = "") {
+                      QWidget* editor, const QString& unit = "",
+                      QCheckBox* check = nullptr) {
+        int col = 0;
+        if (check) {
+            grid->addWidget(check, row, col++);
+        }
         QLabel* lbl = new QLabel(label, this);
         lbl->setStyleSheet("color:#90a4ae; font-size:10px;");
-        grid->addWidget(lbl, row, 0);
-        grid->addWidget(editor, row, 1);
+        grid->addWidget(lbl, row, col++);
+        grid->addWidget(editor, row, col++);
         if (!unit.isEmpty()) {
             QLabel* unitLbl = new QLabel(unit, this);
             unitLbl->setStyleSheet("color:#78909c; font-size:9px;");
-            grid->addWidget(unitLbl, row, 2);
+            grid->addWidget(unitLbl, row, col);
         }
     };
 
@@ -133,8 +138,25 @@ void MotorParamWidget::setupUI()
     m_homeVelSpin        = makeDSpin(0.1, 200.0, 50.0, 1);
     m_homeOffsetSpin     = makeDSpin(-999.0, 999.0, 2.0, 3);
 
+    // 勾选框
+    m_leadScrewCheck = new QCheckBox(this);
+    m_leadScrewCheck->setChecked(true);
+    m_leadScrewCheck->setStyleSheet("QCheckBox { spacing:0px; }");
+    m_leadScrewCheck->setToolTip("导程适用 (旋转轴/曲柄请取消)");
+
+    m_softLimitCheck = new QCheckBox(this);
+    m_softLimitCheck->setChecked(true);
+    m_softLimitCheck->setStyleSheet("QCheckBox { spacing:0px; }");
+    m_softLimitCheck->setToolTip("软限位启用");
+
     int r = 0;
-    addRow(r++, "导程",           m_leadScrewSpin,    "mm/rev");
+    addRow(r++, "导程",           m_leadScrewSpin,    "mm/rev",    m_leadScrewCheck);
+    addRow(r++, "每转脉冲",        m_pulsePerRevSpin,  "pulse");
+    addRow(r++, "电子齿轮比",      m_gearRatioSpin,    "");
+    addRow(r++, "最大速度",        m_maxVelocitySpin,  "mm/s");
+    addRow(r++, "加速度",          m_accelSpin,        "mm/s2");
+    addRow(r++, "减速度",          m_decelSpin,        "mm/s2");
+    addRow(r++, "软限位+",         m_softLimitPosSpin, "mm",       m_softLimitCheck);
     addRow(r++, "每转脉冲",        m_pulsePerRevSpin,  "pulse");
     addRow(r++, "电子齿轮比",      m_gearRatioSpin,    "");
     addRow(r++, "最大速度",        m_maxVelocitySpin,  "mm/s");
@@ -179,6 +201,15 @@ void MotorParamWidget::setupUI()
     connect(exportBtn, &QPushButton::clicked, this, &MotorParamWidget::onExportClicked);
     connect(importBtn, &QPushButton::clicked, this, &MotorParamWidget::onImportClicked);
 
+    // 勾选框联动: 禁用/启用相关spinbox
+    auto connectCheck = [this](QCheckBox* check, std::initializer_list<QWidget*> sps) {
+        connect(check, &QCheckBox::toggled, this, [sps](bool checked) {
+            for (QWidget* w : sps) w->setEnabled(checked);
+        });
+    };
+    connectCheck(m_leadScrewCheck, {m_leadScrewSpin, m_pulsePerRevSpin, m_gearRatioSpin});
+    connectCheck(m_softLimitCheck, {m_softLimitPosSpin, m_softLimitNegSpin});
+
     mainLayout->addStretch();
 }
 
@@ -222,6 +253,8 @@ void MotorParamWidget::loadAxisFromManager(int axisId)
         m_softLimitNegSpin->setValue(-9999.0);
         m_homeVelSpin->setValue(50.0);
         m_homeOffsetSpin->setValue(2.0);
+        m_leadScrewCheck->setChecked(true);
+        m_softLimitCheck->setChecked(true);
         return;
     }
     const MotorAxis& ax = m_motor->axisState(axisId);
@@ -235,6 +268,8 @@ void MotorParamWidget::loadAxisFromManager(int axisId)
     m_softLimitNegSpin->setValue(ax.softLimitNegative);
     m_homeVelSpin->setValue(ax.homeVelocity);
     m_homeOffsetSpin->setValue(ax.homeOffset);
+    m_leadScrewCheck->setChecked(ax.hasLeadScrew);
+    m_softLimitCheck->setChecked(ax.hasSoftLimit);
 }
 
 void MotorParamWidget::onApplyClicked()
@@ -251,6 +286,8 @@ void MotorParamWidget::onApplyClicked()
     params.softLimitNegative = m_softLimitNegSpin->value();
     params.homeVelocity     = m_homeVelSpin->value();
     params.homeOffset       = m_homeOffsetSpin->value();
+    params.hasLeadScrew     = m_leadScrewCheck->isChecked();
+    params.hasSoftLimit     = m_softLimitCheck->isChecked();
 
     emit applyRequested(m_selectedAxisId, params);
 }

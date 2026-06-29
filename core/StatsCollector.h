@@ -8,7 +8,7 @@
  *   - 计算平均节拍 (秒/件)
  *
  * 用法:
- *   - 每次完成一个生产周期时调用 incrementCount()
+ *   - 每次完成一个生产周期时调用 setCount() 同步 ProcessManager 的权威值
  *   - 定时器自动更新运行时长
  */
 
@@ -38,7 +38,8 @@ public:
     void reset();                     // 重置全部统计
 
 public slots:
-    void incrementCount();            // 产量+1 (外部触发)
+    void setCount(int count);         // 同步 ProcessManager 的权威周期计数
+    void incrementCount();            // 产量+1 (外部触发 — 保留兼容)
 
 signals:
     void statsUpdated(int totalCount, double runningHours, double cycleTimeSec);

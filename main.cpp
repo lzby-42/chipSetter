@@ -5,6 +5,7 @@
 #include <QDateTime>
 #include <QMutex>
 #include <QTextStream>
+#include <QDir>
 #include "mainwindow.h"
 
 // ---- file logger ----
@@ -38,23 +39,23 @@ static void fileLogHandler(QtMsgType type, const QMessageLogContext& ctx, const 
 
 int main(int argc, char *argv[])
 {
-    // ---- file logging (must be first, before QApplication) ----
-    // 日志写入当前目录 chipsetter_debug.log (同时输出到控制台)
-    g_logFile.setFileName("chipsetter_debug.log");
-    if (g_logFile.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
-        qInstallMessageHandler(fileLogHandler);
-    }
-    // 确保关键信息也输出到stderr (gdbserver/控制台可见)
-    QFileInfo logInfo(g_logFile.fileName());
-    QString logAbsPath = logInfo.absoluteFilePath();
-    qDebug() << "=== chipSetter V1.0 ===";
-    qDebug() << "日志文件:" << logAbsPath;
-    qDebug() << "构建模式: GTS SDK";
-
     QApplication app(argc, argv);
     app.setApplicationName("chipSetter");
     app.setApplicationVersion("1.0.0");
     app.setOrganizationName("ChipSetter");
+
+    // ---- file logging (QApplication 之后, 首次 qDebug() 之前) ----
+    QString logDirPath = QCoreApplication::applicationDirPath() + "/logs";
+    QDir().mkpath(logDirPath);
+    QString logFileName = logDirPath + "/chipsetter_"
+        + QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss") + ".log";
+    g_logFile.setFileName(logFileName);
+    if (g_logFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        qInstallMessageHandler(fileLogHandler);
+    }
+    qDebug() << "=== chipSetter V1.0 ===";
+    qDebug() << "日志文件:" << QFileInfo(logFileName).absoluteFilePath();
+    qDebug() << "构建模式: GTS SDK";
 
     // ---- load QSS ----
     QFile styleFile(":/resources/style.qss");
