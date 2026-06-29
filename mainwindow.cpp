@@ -54,10 +54,8 @@ void MainWindow::createWidgets()
 
     // 调试界面
     m_statusBar = new StatusBarWidget(this);
-    m_motorPtp  = new MotorPtpWidget(this);
-    m_motorPtp->setMotorManager(m_motorManager);
-    m_motorParam = new MotorParamWidget(this);
-    m_motorParam->setMotorManager(m_motorManager);  // 注入, 让控件能读取实际轴参数
+    m_motorControl = new MotorControlWidget(this);
+    m_motorControl->setMotorManager(m_motorManager);
     m_ioMonitor  = new IoMonitorWidget(this);
     m_stats      = new StatsWidget(this);
     m_alarmList  = new AlarmListWidget(this);
@@ -140,8 +138,7 @@ void MainWindow::setupLayout()
 
     QVBoxLayout* leftCol = new QVBoxLayout();
     leftCol->setSpacing(3);
-    leftCol->addWidget(m_motorPtp, 4);
-    leftCol->addWidget(m_motorParam, 5);
+    leftCol->addWidget(m_motorControl, 1);
     QWidget* leftWidget = new QWidget(this);
     leftWidget->setLayout(leftCol);
     leftWidget->setFixedWidth(420);
@@ -254,23 +251,23 @@ void MainWindow::connectSignals()
             m_statsCollector, &StatsCollector::setCount);
 
     // ===== 电机 (调试界面) =====
-    connect(m_motorPtp, &MotorPtpWidget::moveRequested,
+    connect(m_motorControl, &MotorControlWidget::moveRequested,
             m_motorManager, &MotorManager::moveRequest);
-    connect(m_motorPtp, &MotorPtpWidget::stopRequested,
+    connect(m_motorControl, &MotorControlWidget::stopRequested,
             m_motorManager, &MotorManager::stopMove);
-    connect(m_motorPtp, &MotorPtpWidget::homeRequested,
+    connect(m_motorControl, &MotorControlWidget::homeRequested,
             m_motorManager, &MotorManager::homeRequest);
-    connect(m_motorPtp, &MotorPtpWidget::jogRequested,
+    connect(m_motorControl, &MotorControlWidget::jogRequested,
             m_motorManager, &MotorManager::jogRequest);
 
     // 清报警 — 直接调 GncController
-    connect(m_motorPtp, &MotorPtpWidget::clearAlarmRequested,
+    connect(m_motorControl, &MotorControlWidget::clearAlarmRequested,
             this, [this](int axisId) {
         m_gncController->clearStatus(GNC_CORE_NUM, static_cast<short>(axisId), 1);
     });
 
     // 使能/失能 — 调 MotorManager + 反馈按钮状态
-    connect(m_motorPtp, &MotorPtpWidget::enableRequested,
+    connect(m_motorControl, &MotorControlWidget::enableRequested,
             this, [this](int axisId, bool enable) {
         bool ok;
         if (enable) {
@@ -279,35 +276,35 @@ void MainWindow::connectSignals()
             ok = m_motorManager->disableAxis(axisId);
         }
         // 按实际结果更新按钮
-        m_motorPtp->onAxisEnableChanged(axisId, enable && ok);
+        m_motorControl->onAxisEnableChanged(axisId, enable && ok);
     });
 
     connect(m_motorManager, &MotorManager::positionUpdated,
-            m_motorPtp, &MotorPtpWidget::onPositionUpdated);
+            m_motorControl, &MotorControlWidget::onPositionUpdated);
     connect(m_motorManager, &MotorManager::moveFinished,
-            m_motorPtp, &MotorPtpWidget::onMoveFinished);
+            m_motorControl, &MotorControlWidget::onMoveFinished);
     connect(m_motorManager, &MotorManager::homeFinished,
-            m_motorPtp, &MotorPtpWidget::onHomeFinished);
+            m_motorControl, &MotorControlWidget::onHomeFinished);
 
     // 应用 → 更新参数 + 自动保存
-    connect(m_motorParam, &MotorParamWidget::applyRequested,
+    connect(m_motorControl, &MotorControlWidget::applyRequested,
             this, [this](int axisId, const MotorAxis& params) {
         m_motorManager->updateAxisParams(axisId, params);
         m_motorManager->autoSave();
     });
     // 导出
-    connect(m_motorParam, &MotorParamWidget::exportRequested,
+    connect(m_motorControl, &MotorControlWidget::exportRequested,
             m_motorManager, &MotorManager::exportToFile);
     // 导入
-    connect(m_motorParam, &MotorParamWidget::importRequested,
+    connect(m_motorControl, &MotorControlWidget::importRequested,
             m_motorManager, &MotorManager::importFromFile);
     // 参数更新后通知 UI (刷新spinbox)
     connect(m_motorManager, &MotorManager::axisParamChanged,
-            m_motorParam, &MotorParamWidget::onParamsApplied);
+            m_motorControl, &MotorControlWidget::onParamsApplied);
 
-    connect(m_motorPtp, &MotorPtpWidget::moveRequested,
+    connect(m_motorControl, &MotorControlWidget::moveRequested,
             this, [this](int axisId, double, double, double, double) {
-                m_motorParam->setCurrentAxisId(axisId);
+                m_motorControl->setCurrentAxisId(axisId);
             });
 
     // ===== IO =====

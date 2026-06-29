@@ -23,8 +23,7 @@
 
 // Widgets (调试模式)
 #include "widgets/StatusBarWidget.h"
-#include "widgets/MotorPtpWidget.h"
-#include "widgets/MotorParamWidget.h"
+#include "widgets/MotorControlWidget.h"
 #include "widgets/IoMonitorWidget.h"
 #include "widgets/AlarmListWidget.h"
 #include "widgets/StatsWidget.h"
@@ -69,8 +68,7 @@ private:
 
     // 调试模式面板
     StatusBarWidget*    m_statusBar;
-    MotorPtpWidget*     m_motorPtp;
-    MotorParamWidget*   m_motorParam;
+    MotorControlWidget* m_motorControl;
     IoMonitorWidget*    m_ioMonitor;
     AlarmListWidget*    m_alarmList;
     StatsWidget*        m_stats;
