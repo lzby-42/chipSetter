@@ -167,6 +167,7 @@ void MotorManager::homeRequest(int axisId)
     if (axisId < 1 || axisId > AXIS_COUNT) return;
 
     MotorAxis& ax = m_axes[axisId - 1];
+    if (!ax.isActive) return;          // 预留轴跳过
 
     // 模式35: 当前位置清零 (不移动)
     if (ax.homeMode == 35) {
@@ -195,8 +196,10 @@ void MotorManager::homeRequest(int axisId)
     prm.moveDir       = static_cast<short>(ax.homeDir);           // 搜索方向
     prm.edge          = static_cast<short>(ax.homeEdge);          // 触发边沿
     prm.triggerIndex  = static_cast<short>(ax.triggerIndex);      // Home GPI (mode=20)
-    prm.velHigh       = ax.homeVelocity > 0 ? ax.homeVelocity : 10.0;
-    prm.velLow        = prm.velHigh * 0.5;
+    // homeVelocity 单位 mm/s → 转为 pulse/ms (与moveRequest一致)
+    double hv = ax.homeVelocity > 0 ? mmToPulse(axisId, ax.homeVelocity) / 1000.0 : 10.0;
+    prm.velHigh       = hv;
+    prm.velLow        = hv * 0.5;
     prm.acc           = 1.0;
     prm.dec           = 1.0;
     prm.homeOffset    = static_cast<long>(mmToPulse(axisId, ax.homeOffset));
