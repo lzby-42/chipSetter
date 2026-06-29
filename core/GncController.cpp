@@ -181,7 +181,8 @@ bool GncController::moveAbsolute(short core, short axis, const TMoveAbsolutePrmE
     trapPrm.dec        = prm.dec;
     trapPrm.velStart   = prm.velStart;
     trapPrm.smoothTime = 0;
-    if (gtsCall("GTN_SetTrapPrm", GTN_SetTrapPrm(core, profile, &trapPrm)) != 0) return false;
+    // 部分轴不支持SetTrapPrm, 失败不阻塞 (使用控制器默认参数)
+    gtsCall("GTN_SetTrapPrm", GTN_SetTrapPrm(core, profile, &trapPrm));
 
     if (gtsCall("GTN_SetVel", GTN_SetVel(core, profile, prm.vel)) != 0) return false;
     if (gtsCall("GTN_SetPos", GTN_SetPos(core, profile, static_cast<long>(prm.pos))) != 0) return false;
