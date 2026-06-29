@@ -216,7 +216,7 @@ void MotorManager::homeRequest(int axisId)
             return;
         }
 
-        // Step 2: 手动Trap — 往搜索方向持续运动, 等待硬件捕获
+        // Step 2: Jog模式 — 持续匀速往搜索方向运动 (不设目标位置)
         double hv;
         if (ax.hasLeadScrew) {
             hv = ax.homeVelocity > 0 ? mmToPulse(axisId, ax.homeVelocity) / 1000.0 : 10.0;
@@ -224,16 +224,12 @@ void MotorManager::homeRequest(int axisId)
             hv = ax.homeVelocity > 0 ? ax.homeVelocity : 10.0;
         }
 
-        TMoveAbsolutePrmEx prm;
-        memset(&prm, 0, sizeof(prm));
-        long longPos = (ax.homeDir > 0) ? 2147483647L : -2147483647L;  // 极大值 → 持续运动
-        prm.pos     = static_cast<double>(longPos);
-        prm.vel     = hv;
-        prm.acc     = 0.1;
-        prm.dec     = 0.1;
-
-        if (!m_controller->moveAbsolute(GNC_CORE_NUM, axis, prm)) {
-            qWarning() << "MotorManager: 轴" << axisId << "Trap启动失败";
+        TJogPrm jogPrm;
+        memset(&jogPrm, 0, sizeof(jogPrm));
+        jogPrm.acc = 0.1;
+        jogPrm.dec = 0.1;
+        if (!m_controller->startJog(axis, hv, jogPrm)) {
+            qWarning() << "MotorManager: 轴" << axisId << "Jog启动失败";
             emit homeFinished(axisId, false, -1);
             return;
         }
@@ -533,7 +529,7 @@ void MotorManager::onPollTimer()
             if (ax.homeMode == 20) {
                 // IO捕获模式: 等待硬件锁存 → Stop → ZeroPos
                 TTriggerStatusEx trigSts;
-                if (m_controller->getTriggerStatus(axisId, trigSts) && trigSts.done) {
+                if (m_controller->getTriggerStatus(axisId, trigSts) && (trigSts.execute || trigSts.done)) {
                     // 捕获成功! 停 + 清零
                     m_controller->stopMove(GNC_CORE_NUM, axisId);
                     ax.isHomed = true;

@@ -232,6 +232,18 @@ bool GncController::getTriggerStatus(short axis, TTriggerStatusEx& sts)
     return gtsCall("GTN_GetTriggerStatusEx", rtn) == 0;
 }
 
+bool GncController::startJog(short axis, double vel, const TJogPrm& prm)
+{
+    TJogPrm p = prm;
+    if (gtsCall("GTN_PrfJog", GTN_PrfJog(GNC_CORE_NUM, axis)) != 0) return false;
+    if (gtsCall("GTN_SetJogPrm", GTN_SetJogPrm(GNC_CORE_NUM, axis, &p)) != 0) return false;
+    if (gtsCall("GTN_SetVel", GTN_SetVel(GNC_CORE_NUM, axis, vel)) != 0) return false;
+    long mask = 1L << (axis - 1);
+    if (gtsCall("GTN_Update", GTN_Update(GNC_CORE_NUM, mask)) != 0) return false;
+    qDebug() << "[Gnc] startJog axis=" << axis << " vel=" << vel;
+    return true;
+}
+
 // ============================================================
 // 状态读取
 // ============================================================
