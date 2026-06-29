@@ -24,6 +24,8 @@ MotorManager::MotorManager(GncController* controller, QObject *parent)
         MotorAxis ax;
         ax.axisId = i + 1;  // 1-based
         ax.name   = (i < axisNames.size()) ? axisNames[i] : QString("轴%1").arg(i + 1);
+        // 预留轴4/5/6不存在物理电机
+        if (i == 3 || i == 4 || i == 5) ax.isActive = false;
         m_axes[i] = ax;
     }
     memset(m_homingActive, 0, sizeof(m_homingActive));
@@ -52,6 +54,7 @@ bool MotorManager::initialize()
 void MotorManager::loadLimitsFromController()
 {
     for (int i = 1; i <= AXIS_COUNT; ++i) {
+        if (!m_axes[i - 1].isActive) continue;
         long posPulse = 0, negPulse = 0;
         if (m_controller->getSoftLimit(GNC_CORE_NUM, static_cast<short>(i), posPulse, negPulse)) {
             // cfg未设限位时返回0, 保留默认宽限位 (不在cfg设限位的轴不拦)
@@ -163,8 +166,21 @@ void MotorManager::homeRequest(int axisId)
 {
     if (axisId < 1 || axisId > AXIS_COUNT) return;
 
-    // 尝试使能 (部分步进轴不需要, 失败不阻塞)
-    if (!m_axes[axisId - 1].isEnabled) {
+    MotorAxis& ax = m_axes[axisId - 1];
+
+    // 模式35: 当前位置清零 (不移动)
+    if (ax.homeMode == 35) {
+        ax.isHomed = true;
+        ax.currentPosition = 0.0;
+        m_controller->zeroPosition(GNC_CORE_NUM, static_cast<short>(axisId));
+        emit homeFinished(axisId, true, 0);
+        emit positionUpdated(axisId, 0.0);
+        qDebug() << "MotorManager: 轴" << axisId << "mode=35, 直接清零";
+        return;
+    }
+
+    // 尝试使能
+    if (!ax.isEnabled) {
         if (enableAxis(axisId)) {
             qDebug() << "MotorManager: 轴" << axisId << "自动使能成功";
         } else {
@@ -172,25 +188,30 @@ void MotorManager::homeRequest(int axisId)
         }
     }
 
-    // 使用标准回零API HOME_MODE_LIMIT (限位触发)
-    // 方向: mode 10-18 正向, 28-36 负向
-    TStandardHomePrm prm;
+    // GTN_GoHome (Smart Home API)
+    THomePrm prm;
     memset(&prm, 0, sizeof(prm));
-    prm.mode         = 10;      // HOME_MODE_LIMIT: 正向搜索限位
-    prm.highSpeed    = 10.0;    // pulse/ms 高速段
-    prm.lowSpeed     = 5.0;     // pulse/ms 低速段 (触碰限位后)
-    prm.acc          = 1.0;     // pulse/ms^2
-    prm.offset       = 0;       // 回零偏移 (pulse)
-    prm.check        = 0;       // 不自检 (无编码器轴自检会误报error=-1)
-    prm.autoZeroPos  = 1;       // 回零后自动清零位置
-    prm.motorStopDelay = 100;   // 电机停止延迟 (ms)
+    prm.mode          = static_cast<short>(ax.homeMode);          // 10=LIMIT, 20=HOME
+    prm.moveDir       = static_cast<short>(ax.homeDir);           // 搜索方向
+    prm.edge          = static_cast<short>(ax.homeEdge);          // 触发边沿
+    prm.triggerIndex  = static_cast<short>(ax.triggerIndex);      // Home GPI (mode=20)
+    prm.velHigh       = ax.homeVelocity > 0 ? ax.homeVelocity : 10.0;
+    prm.velLow        = prm.velHigh * 0.5;
+    prm.acc           = 1.0;
+    prm.dec           = 1.0;
+    prm.homeOffset    = static_cast<long>(mmToPulse(axisId, ax.homeOffset));
+    prm.searchHomeDistance    = 0;   // 0=搜索距离不限 (旋转轴必须)
+    prm.searchIndexDistance   = 0;   // 无编码器
+    prm.escapeStep    = 100;
 
     short axis = static_cast<short>(axisId);
     bool ok = m_controller->executeHome(GNC_CORE_NUM, axis, prm);
     if (ok) {
-        m_axes[axisId - 1].isHomed = false;
-        m_homingActive[axisId - 1] = true;  // 标记回零进行中, 轮询将检测完成/失败
-        qDebug() << "MotorManager: 轴" << axisId << "开始回零 mode=" << prm.mode;
+        ax.isHomed = false;
+        m_homingActive[axisId - 1] = true;
+        qDebug() << "MotorManager: 轴" << axisId << "开始回零 mode=" << prm.mode
+                 << " dir=" << prm.moveDir << " edge=" << prm.edge
+                 << " trigger=" << prm.triggerIndex;
     } else {
         qWarning() << "MotorManager: 轴" << axisId << "回零命令发送失败";
     }
@@ -224,6 +245,7 @@ bool MotorManager::updateAxisParams(int axisId, const MotorAxis& params)
 {
     if (axisId < 1 || axisId > AXIS_COUNT) return false;
     MotorAxis& ax = m_axes[axisId - 1];
+    if (!ax.isActive) return false;   // 预留轴跳过
 
     ax.velocity           = params.velocity;
     ax.acceleration       = params.acceleration;
@@ -236,14 +258,16 @@ bool MotorManager::updateAxisParams(int axisId, const MotorAxis& params)
     ax.jogStep            = params.jogStep;
     ax.homeVelocity       = params.homeVelocity;
     ax.homeOffset         = params.homeOffset;
+    ax.homeDir            = params.homeDir;
+    ax.homeEdge           = params.homeEdge;
+    ax.homeMode           = params.homeMode;
+    ax.triggerIndex       = params.triggerIndex;
     ax.hasLeadScrew       = params.hasLeadScrew;
     ax.hasSoftLimitPositive = params.hasSoftLimitPositive;
     ax.hasSoftLimitNegative = params.hasSoftLimitNegative;
 
-    // 同步到GNC软限位 (仅当有自定义限位时, 避免对不支持限位的轴报错)
-    bool hasCustomLimits = (ax.hasSoftLimitPositive && ax.softLimitPositive < 9990) ||
-                           (ax.hasSoftLimitNegative && ax.softLimitNegative > -9990);
-    if (hasCustomLimits) {
+    // 同步到GNC软限位 (非活跃轴或有标志位才写)
+    if (ax.hasSoftLimitPositive || ax.hasSoftLimitNegative) {
         long posPulse = ax.hasSoftLimitPositive
             ? mmToPulse(axisId, ax.softLimitPositive)
             :  2147483647L;
@@ -277,6 +301,11 @@ QJsonObject MotorManager::axisToJson(const MotorAxis& ax) const
     obj["hasLeadScrew"]           = ax.hasLeadScrew;
     obj["hasSoftLimitPositive"]   = ax.hasSoftLimitPositive;
     obj["hasSoftLimitNegative"]   = ax.hasSoftLimitNegative;
+    obj["homeDir"]        = ax.homeDir;
+    obj["homeEdge"]       = ax.homeEdge;
+    obj["homeMode"]       = ax.homeMode;
+    obj["triggerIndex"]   = ax.triggerIndex;
+    obj["isActive"]       = ax.isActive;
     return obj;
 }
 
@@ -297,6 +326,11 @@ void MotorManager::jsonToAxis(const QJsonObject& obj, MotorAxis& ax)
     ax.hasLeadScrew            = obj["hasLeadScrew"].toBool(true);
     ax.hasSoftLimitPositive    = obj["hasSoftLimitPositive"].toBool(true);
     ax.hasSoftLimitNegative    = obj["hasSoftLimitNegative"].toBool(true);
+    ax.homeDir         = obj["homeDir"].toInt(1);
+    ax.homeEdge        = obj["homeEdge"].toInt(0);
+    ax.homeMode        = obj["homeMode"].toInt(10);
+    ax.triggerIndex    = obj["triggerIndex"].toInt(-1);
+    ax.isActive        = obj["isActive"].toBool(ax.axisId != 4 && ax.axisId != 5 && ax.axisId != 6);
 }
 
 // ---- 自动加载/保存 ----
@@ -415,6 +449,7 @@ void MotorManager::onPollTimer()
 
     for (int i = 0; i < AXIS_COUNT; ++i) {
         MotorAxis& ax = m_axes[i];
+        if (!ax.isActive) continue;           // 跳过预留轴
         short axisId  = static_cast<short>(ax.axisId);
 
         long status   = 0;
@@ -432,11 +467,11 @@ void MotorManager::onPollTimer()
             emit positionUpdated(i + 1, ax.currentPosition);
         }
 
-        // 回零状态 — 只在主动触发回零期间检查, 避免洪流
+        // 回零状态 — 只在主动触发回零期间检查
         if (ax.isHomed == false && m_homingActive[axisId - 1]) {
-            TStandardHomeStatus homeSts;
+            THomeStatus homeSts;
             m_controller->getHomeStatus(GNC_CORE_NUM, axisId, homeSts);
-            if (homeSts.run == 0 && homeSts.error == 0 && homeSts.stage == 100) {
+            if (homeSts.run == 0 && homeSts.error == 0) {
                 ax.isHomed = true;
                 ax.isMoving = false;
                 m_homingActive[axisId - 1] = false;

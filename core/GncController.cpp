@@ -202,22 +202,20 @@ bool GncController::stopMove(short core, short axis)
 // 回零
 // ============================================================
 
-bool GncController::executeHome(short core, short axis, const TStandardHomePrm& prm)
+bool GncController::executeHome(short core, short axis, const THomePrm& prm)
 {
-    Q_UNUSED(core);
-    TStandardHomePrm homePrm = prm;
-    short rtn = GT_ExecuteStandardHome(axis, &homePrm);
-    if (gtsCall("GT_ExecuteStandardHome", rtn) != 0) return false;
-    qDebug() << "[Gnc] executeHome axis=" << axis << " mode=" << prm.mode;
+    THomePrm homePrm = prm;
+    short rtn = GTN_GoHome(core, axis, &homePrm);
+    if (gtsCall("GTN_GoHome", rtn) != 0) return false;
+    qDebug() << "[Gnc] executeHome axis=" << axis << " mode=" << prm.mode << " dir=" << prm.moveDir;
     return true;
 }
 
-bool GncController::getHomeStatus(short core, short axis, TStandardHomeStatus& sts)
+bool GncController::getHomeStatus(short core, short axis, THomeStatus& sts)
 {
-    Q_UNUSED(core);
     memset(&sts, 0, sizeof(sts));
-    return gtsCall("GT_GetStandardHomeStatus",
-                   GT_GetStandardHomeStatus(axis, &sts)) == 0;
+    return gtsCall("GTN_GetHomeStatus",
+                   GTN_GetHomeStatus(core, axis, &sts)) == 0;
 }
 
 // ============================================================

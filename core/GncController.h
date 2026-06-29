@@ -77,8 +77,8 @@ public:
     bool stopMove(short core, short axis);       // 平滑停止 (GT_Stop, 带减速)
 
     // ---- 回零 ----
-    bool executeHome(short core, short axis, const TStandardHomePrm& prm);
-    bool getHomeStatus(short core, short axis, TStandardHomeStatus& sts);
+    bool executeHome(short core, short axis, const THomePrm& prm);  // GTN_GoHome
+    bool getHomeStatus(short core, short axis, THomeStatus& sts);
 
     // ---- 状态读取 ----
     bool getAxisStatus(short core, short axis, long& status, unsigned long& clock);
