@@ -67,11 +67,11 @@ short GncController::gtsCall(const char* fnName, short result)
 
 bool GncController::openCard()
 {
-    qDebug() << "[Gnc] GTN_OpenCard(CHANNEL_RINGNET=" << CHANNEL_RINGNET << ")...";
-    short rtn = GTN_OpenCard(CHANNEL_RINGNET);
-    if (gtsCall("GTN_OpenCard", rtn) != 0) {
+    qDebug() << "[Gnc] GTN_Open(CHANNEL_RINGNET=" << CHANNEL_RINGNET << ")...";
+    short rtn = GTN_Open(CHANNEL_RINGNET);
+    if (gtsCall("GTN_Open", rtn) != 0) {
         qCritical() << "[Gnc] 开卡失败! 错误码:" << rtn;
-        emit hardwareError("GTS", QString("开卡失败! GTN_OpenCard返回%1").arg(rtn));
+        emit hardwareError("GTS", QString("开卡失败! GTN_Open返回%1").arg(rtn));
         return false;
     }
     GTN_Reset(GNC_CORE_NUM);
