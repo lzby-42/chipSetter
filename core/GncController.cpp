@@ -2,12 +2,12 @@
  * @file GncController.cpp
  * @brief GTS SDK 实现 — 对接固高 GNC-C610 运动控制器
  *
- * GTS SDK 关键API:
- *   GT_Open(CHANNEL_RINGNET)  — 打开环网控制器 (GNC-C610)
- *   GT_LoadConfig(cfgFile)    — 加载MotionStudio生成的配置
- *   GT_GetDi(MC_GPI, &bits)   — 读取GPI的32位掩码 (MC_GPI=4)
- *   GT_SetDoBit(MC_GPO, idx, val) — 设置单个GPO (MC_GPO=12)
- *   GT_GetSts(axis, &sts, 1, &clock) — 读取轴状态
+ * GTS SDK (全部使用网络版GTN_ API):
+ *   GTN_OpenCard(CHANNEL_RINGNET)  — 打开环网控制器 (GNC-C610)
+ *   GTN_LoadConfig(core, cfgFile)   — 加载MotionStudio生成的配置
+ *   GTN_GetDi(core, MC_GPI, &bits)  — 读取GPI的32位掩码
+ *   GTN_SetDoBit(core, MC_GPO, idx, val) — 设置单个GPO
+ *   GTN_GetSts(core, axis, &sts)    — 读取轴状态
  */
 #include "GncController.h"
 #include "HardwareConfig.h"
@@ -67,15 +67,14 @@ short GncController::gtsCall(const char* fnName, short result)
 
 bool GncController::openCard()
 {
-    qDebug() << "[Gnc] GT_Open(CHANNEL_RINGNET=" << CHANNEL_RINGNET << ")...";
-    short rtn = GT_Open(CHANNEL_RINGNET);
-    if (gtsCall("GT_Open", rtn) != 0) {
+    qDebug() << "[Gnc] GTN_OpenCard(CHANNEL_RINGNET=" << CHANNEL_RINGNET << ")...";
+    short rtn = GTN_OpenCard(CHANNEL_RINGNET);
+    if (gtsCall("GTN_OpenCard", rtn) != 0) {
         qCritical() << "[Gnc] 开卡失败! 错误码:" << rtn;
-        emit hardwareError("GTS", QString("开卡失败! GT_Open返回%1, 请检查板卡/驱动/gts.dll").arg(rtn));
+        emit hardwareError("GTS", QString("开卡失败! GTN_OpenCard返回%1").arg(rtn));
         return false;
     }
-    qDebug() << "[Gnc] GT_Reset...";
-    GT_Reset();
+    GTN_Reset(GNC_CORE_NUM);
 
     m_connected = true;
     qDebug() << "[Gnc] openCard 成功!";
@@ -86,7 +85,7 @@ bool GncController::netInit(const QString& xmlFile, int overTimeSec)
 {
     Q_UNUSED(xmlFile);
     Q_UNUSED(overTimeSec);
-    qDebug() << "[Gnc] netInit — GTS无需XML, 后续GT_LoadConfig加载cfg";
+    qDebug() << "[Gnc] netInit — GTS无需XML, 后续GTN_LoadConfig加载cfg";
     return true;
 }
 
@@ -113,20 +112,20 @@ bool GncController::loadConfig(short core, const QString& cfgFile)
     qDebug() << "[Gnc] GTN_LoadConfig(core=" << core << "," << m_configPath << ")...";
     QByteArray pathBytes = m_configPath.toLocal8Bit();
     short rtn = GTN_LoadConfig(core, pathBytes.data());
-    if (gtsCall("GT_LoadConfig", rtn) != 0) {
-        emit hardwareError("GTS", QString("加载配置失败! GT_LoadConfig返回%1, 文件:%2").arg(rtn).arg(m_configPath));
+    if (gtsCall("GTN_LoadConfig", rtn) != 0) {
+        emit hardwareError("GTS", QString("加载配置失败! 文件:%1").arg(m_configPath));
         qCritical() << "[Gnc] LoadConfig失败!" << m_configPath;
         return false;
     }
-    qDebug() << "[Gnc] GT_LoadConfig 成功!";
+    qDebug() << "[Gnc] GTN_LoadConfig 成功!";
     return true;
 }
 
 bool GncController::closeCard()
 {
     if (!m_connected) return true;
-    qDebug() << "[Gnc] GT_Close...";
-    GT_Close();
+    qDebug() << "[Gnc] GTN_Close...";
+    GTN_Close();
     m_connected = false;
     return true;
 }
@@ -142,26 +141,22 @@ bool GncController::isConnected() const
 
 bool GncController::axisOn(short core, short axis)
 {
-    Q_UNUSED(core);
-    return gtsCall("GT_AxisOn", GT_AxisOn(axis)) == 0;
+    return gtsCall("GTN_AxisOn", GTN_AxisOn(core, axis)) == 0;
 }
 
 bool GncController::axisOff(short core, short axis)
 {
-    Q_UNUSED(core);
-    return gtsCall("GT_AxisOff", GT_AxisOff(axis)) == 0;
+    return gtsCall("GTN_AxisOff", GTN_AxisOff(core, axis)) == 0;
 }
 
 bool GncController::clearStatus(short core, short axis, short count)
 {
-    Q_UNUSED(core);
-    return gtsCall("GT_ClrSts", GT_ClrSts(axis, count)) == 0;
+    return gtsCall("GTN_ClrSts", GTN_ClrSts(core, axis, count)) == 0;
 }
 
 bool GncController::zeroPosition(short core, short axis)
 {
-    Q_UNUSED(core);
-    return gtsCall("GT_ZeroPos", GT_ZeroPos(axis, 1)) == 0;
+    return gtsCall("GTN_ZeroPos", GTN_ZeroPos(core, axis, 1)) == 0;
 }
 
 // ============================================================
@@ -194,10 +189,8 @@ bool GncController::moveAbsolute(short core, short axis, const TMoveAbsolutePrmE
 
 bool GncController::stopMove(short core, short axis)
 {
-    Q_UNUSED(core);
     long mask = 1L << (axis - 1);
-    // option=0: 平滑停止 (使用 GT_SetStopDec 设定的减速度), option=1: 急停
-    if (gtsCall("GT_Stop", GT_Stop(mask, 0)) != 0) return false;
+    if (gtsCall("GTN_Stop", GTN_Stop(core, mask, 0)) != 0) return false;
     qDebug() << "[Gnc] stopMove axis=" << axis;
     return true;
 }
@@ -228,30 +221,25 @@ bool GncController::getHomeStatus(short core, short axis, THomeStatus& sts)
 
 bool GncController::getAxisStatus(short core, short axis, long& status, unsigned long& clock)
 {
-    Q_UNUSED(core);
-    return gtsCall("GT_GetSts", GT_GetSts(axis, &status, 1, &clock)) == 0;
+    return gtsCall("GTN_GetSts", GTN_GetSts(core, axis, &status, 1, &clock)) == 0;
 }
 
 bool GncController::getProfilePosition(short core, short axis, double& prfPos, unsigned long& clock)
 {
-    Q_UNUSED(core);
-    short rtn = GT_GetPrfPos(axis, &prfPos, 1, &clock);
-    // prfPos 返回原始pulse, pulseToMm负责换算 (有导程→mm, 无导程→pulse直出)
-    return gtsCall("GT_GetPrfPos", rtn) == 0;
+    // 返回原始pulse, pulseToMm负责换算 (有导程→mm, 无导程→pulse直出)
+    return gtsCall("GTN_GetPrfPos", GTN_GetPrfPos(core, axis, &prfPos, 1, &clock)) == 0;
 }
 
 bool GncController::getEncoderPosition(short core, short axis, double& encPos, unsigned long& clock)
 {
-    Q_UNUSED(core);
-    short rtn = GT_GetAxisEncPos(axis, &encPos, 1, &clock);
-    return gtsCall("GT_GetAxisEncPos", rtn) == 0;
+    return gtsCall("GTN_GetAxisEncPos",
+                   GTN_GetAxisEncPos(core, axis, &encPos, 1, &clock)) == 0;
 }
 
 bool GncController::getAxisError(short core, short axis, double& error, unsigned long& clock)
 {
-    Q_UNUSED(core);
-    short rtn = GT_GetAxisError(axis, &error, 1, &clock);
-    return gtsCall("GT_GetAxisError", rtn) == 0;
+    return gtsCall("GTN_GetAxisError",
+                   GTN_GetAxisError(core, axis, &error, 1, &clock)) == 0;
 }
 
 bool GncController::getLimitInfo(short core, short axis, TLimitInfo& info)
@@ -268,10 +256,9 @@ bool GncController::getLimitInfo(short core, short axis, TLimitInfo& info)
 
 bool GncController::readDI(short core, short diType, short diIndex, short* values, short count)
 {
-    Q_UNUSED(core);
     long bitmask = 0;
-    short rtn = GT_GetDi(diType, &bitmask);
-    if (gtsCall("GT_GetDi", rtn) != 0) {
+    short rtn = GTN_GetDi(core, diType, &bitmask);
+    if (gtsCall("GTN_GetDi", rtn) != 0) {
         memset(values, 0, count * sizeof(short));
         return false;
     }
@@ -286,7 +273,7 @@ bool GncController::readDI(short core, short diType, short diIndex, short* value
     if (diCallCount <= 3) {
         QString bits;
         for (short i = 0; i < count; ++i) bits += QString::number(values[i]);
-        qDebug() << "[Gnc] GT_GetDi #" << diCallCount
+        qDebug() << "[Gnc] GTN_GetDi #" << diCallCount
                  << "diType=" << diType << "bitmask=0x"
                  << QString::number(bitmask, 16) << "values=[" << bits << "]";
     }
@@ -295,11 +282,10 @@ bool GncController::readDI(short core, short diType, short diIndex, short* value
 
 bool GncController::writeDO(short core, short doType, short doIndex, short* values, short count)
 {
-    Q_UNUSED(core);
     bool allOk = true;
     for (short i = 0; i < count; ++i) {
-        short rtn = GT_SetDoBit(doType, doIndex + i, values[i]);
-        if (gtsCall("GT_SetDoBit", rtn) != 0) allOk = false;
+        short rtn = GTN_SetDoBit(core, doType, doIndex + i, values[i]);
+        if (gtsCall("GTN_SetDoBit", rtn) != 0) allOk = false;
     }
     return allOk;
 }
