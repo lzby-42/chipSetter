@@ -308,7 +308,17 @@ void MotorControlWidget::loadAxisFromManager(int axisId)
 {
     if (!m_motor) return;
     const MotorAxis& ax = m_motor->axisState(axisId);
-    m_curPosLabel->setText(QString("%1 mm").arg(ax.currentPosition, 0, 'f', 3));
+    // 根据是否有导程切换单位: mm(3位小数) / pulse(0位小数)
+    bool isLinear = ax.hasLeadScrew;
+    QString unit = isLinear ? "mm" : "pulse";
+    int decimals = isLinear ? 3 : 0;
+    m_curPosLabel->setText(QString("%1 %2").arg(ax.currentPosition, 0, 'f', decimals).arg(unit));
+    m_targetPosSpin->setDecimals(decimals);
+    m_targetPosSpin->setSuffix(QString(" %1").arg(unit));
+    if (isLinear)
+        m_targetPosSpin->setRange(-9999.999, 9999.999);
+    else
+        m_targetPosSpin->setRange(-99999999, 99999999);
     m_leadScrewSpin->setValue(ax.leadScrew);
     m_pulsePerRevSpin->setValue(ax.pulsePerRev);
     m_gearRatioSpin->setValue(ax.gearRatio);
@@ -403,8 +413,11 @@ void MotorControlWidget::onImportClicked()
 // === Feedback slots ===
 void MotorControlWidget::onPositionUpdated(int axisId, double position)
 {
-    if (axisId == m_selectedAxisId)
-        m_curPosLabel->setText(QString("%1 mm").arg(position, 0, 'f', 3));
+    if (axisId != m_selectedAxisId) return;
+    bool isLinear = m_motor ? m_motor->axisState(axisId).hasLeadScrew : true;
+    QString unit = isLinear ? "mm" : "pulse";
+    int decimals = isLinear ? 3 : 0;
+    m_curPosLabel->setText(QString("%1 %2").arg(position, 0, 'f', decimals).arg(unit));
 }
 
 void MotorControlWidget::onMoveFinished(int axisId, bool success)
