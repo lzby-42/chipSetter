@@ -530,7 +530,6 @@ void MotorManager::onPollTimer()
                 // IO捕获模式: 等待硬件锁存 → Stop → ZeroPos
                 TTriggerStatusEx trigSts;
                 if (m_controller->getTriggerStatus(axisId, trigSts) && (trigSts.execute || trigSts.done)) {
-                    // 捕获成功! 停 + 清零
                     m_controller->stopMove(GNC_CORE_NUM, axisId);
                     ax.isHomed = true;
                     ax.isMoving = false;
@@ -539,13 +538,19 @@ void MotorManager::onPollTimer()
                     m_controller->zeroPosition(GNC_CORE_NUM, axisId);
                     emit homeFinished(i + 1, true, 0);
                     emit positionUpdated(i + 1, 0.0);
-                    qDebug() << "MotorManager: 轴" << axisId << "IO捕获回零完成 latchPos=" << trigSts.position;
+                    qDebug() << "MotorManager: 轴" << axisId << "IO捕获成功! latchPos=" << trigSts.position;
                 } else if (!(status & 0x400) && ax.isMoving) {
-                    // 运动停了但没捕获 → 失败
                     ax.isMoving = false;
                     m_homingActive[axisId - 1] = false;
-                    qWarning() << "MotorManager: 轴" << axisId << "IO回零失败: 未捕获到信号";
+                    qWarning() << "MotorManager: 轴" << axisId << "IO回零失败: 运动停止但未捕获";
                     emit homeFinished(i + 1, false, -1);
+                } else {
+                    // 运动中, 每500ms报告一次等待状态
+                    static int tickCount = 0;
+                    if (++tickCount % 10 == 0) {  // 10 ticks = 500ms
+                        qDebug() << "MotorManager: 轴" << axisId << "IO回零搜索中... execute="
+                                 << trigSts.execute << " done=" << trigSts.done;
+                    }
                 }
             } else {
                 // mode=10(LIMIT): GTN_GoHome状态检测
