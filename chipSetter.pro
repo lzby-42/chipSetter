@@ -23,6 +23,7 @@ SOURCES += \
     core/DispensingPlatformController.cpp \
     core/PickupPlatformController.cpp \
     widgets/StatusBarWidget.cpp \
+    widgets/MotorControlWidget.cpp \
     widgets/MotorPtpWidget.cpp \
     widgets/MotorParamWidget.cpp \
     widgets/IoMonitorWidget.cpp \
@@ -49,6 +50,7 @@ HEADERS += \
     core/DispensingPlatformController.h \
     core/PickupPlatformController.h \
     widgets/StatusBarWidget.h \
+    widgets/MotorControlWidget.h \
     widgets/MotorPtpWidget.h \
     widgets/MotorParamWidget.h \
     widgets/IoMonitorWidget.h \
