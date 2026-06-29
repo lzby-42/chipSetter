@@ -285,6 +285,8 @@ void MainWindow::connectSignals()
             m_motorControl, &MotorControlWidget::onMoveFinished);
     connect(m_motorManager, &MotorManager::homeFinished,
             m_motorControl, &MotorControlWidget::onHomeFinished);
+    connect(m_motorManager, &MotorManager::axisStatusChanged,
+            m_motorControl, &MotorControlWidget::onAxisStatusChanged);
 
     // 应用 → 更新参数 + 自动保存
     connect(m_motorControl, &MotorControlWidget::applyRequested,

@@ -82,6 +82,14 @@ private:
     QPushButton*     m_clearAlarmBtn;
     QPushButton*     m_enableBtn;
 
+    // Status indicators
+    QLabel*          m_stsAlarmLabel;
+    QLabel*          m_stsDriveLabel;
+    QLabel*          m_stsLimitPLabel;
+    QLabel*          m_stsLimitNLabel;
+    QLabel*          m_stsMovingLabel;
+    QLabel*          m_stsDoneLabel;
+
     // Param grid
     QDoubleSpinBox*  m_leadScrewSpin;
     QSpinBox*        m_pulsePerRevSpin;

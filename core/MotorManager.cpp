@@ -500,6 +500,7 @@ void MotorManager::onPollTimer()
         }
 
         ax.rawStatus = status;
+        emit axisStatusChanged(i + 1, status);
     }
 }
 

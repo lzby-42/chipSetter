@@ -153,6 +153,29 @@ void MotorControlWidget::setupUI()
     auxRow->addWidget(m_enableBtn);
     ptpLayout->addLayout(auxRow);
 
+    // Status indicators
+    auto makeStsLabel = [this](const QString& text) {
+        QLabel* lbl = new QLabel(text, this);
+        lbl->setStyleSheet("color:#555; font-size:7px; padding:1px 3px;");
+        lbl->setFixedHeight(14);
+        return lbl;
+    };
+    QHBoxLayout* stsRow = new QHBoxLayout(); stsRow->setSpacing(3);
+    m_stsAlarmLabel  = makeStsLabel("急停");
+    m_stsDriveLabel  = makeStsLabel("驱动");
+    m_stsLimitPLabel = makeStsLabel("限位+");
+    m_stsLimitNLabel = makeStsLabel("限位-");
+    m_stsMovingLabel = makeStsLabel("运行");
+    m_stsDoneLabel   = makeStsLabel("到位");
+    stsRow->addWidget(m_stsAlarmLabel);
+    stsRow->addWidget(m_stsDriveLabel);
+    stsRow->addWidget(m_stsLimitPLabel);
+    stsRow->addWidget(m_stsLimitNLabel);
+    stsRow->addWidget(m_stsMovingLabel);
+    stsRow->addWidget(m_stsDoneLabel);
+    stsRow->addStretch();
+    ptpLayout->addLayout(stsRow);
+
     ptpLayout->addStretch();
     body->addLayout(ptpLayout);
 
@@ -387,7 +410,21 @@ void MotorControlWidget::onMoveFinished(int axisId, bool success)
 void MotorControlWidget::onHomeFinished(int axisId, bool success, int stage)
     { Q_UNUSED(axisId); Q_UNUSED(success); Q_UNUSED(stage); }
 void MotorControlWidget::onAxisStatusChanged(int axisId, long status)
-    { Q_UNUSED(axisId); Q_UNUSED(status); }
+{
+    if (axisId != m_selectedAxisId) return;
+    auto setLabel = [](QLabel* lbl, bool active, const QString& color) {
+        lbl->setStyleSheet(QString("color:%1; font-size:7px; padding:1px 3px;"
+            "background:%2; border-radius:2px;")
+            .arg(active ? "#fff" : "#555")
+            .arg(active ? color : "#222"));
+    };
+    setLabel(m_stsAlarmLabel,  status & 0x001, "#b71c1c");   // bit 0 急停报警
+    setLabel(m_stsDriveLabel,  status & 0x002, "#d32f2f");   // bit 1 驱动报警
+    setLabel(m_stsLimitPLabel, status & 0x020, "#e65100");   // bit 5 正限位
+    setLabel(m_stsLimitNLabel, status & 0x040, "#ff9800");   // bit 6 负限位
+    setLabel(m_stsMovingLabel, status & 0x400, "#1565c0");   // bit 10 运行中
+    setLabel(m_stsDoneLabel,   status & 0x800, "#1b5e20");   // bit 11 已到位
+}
 
 void MotorControlWidget::onAxisEnableChanged(int axisId, bool enabled)
 {
