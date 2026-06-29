@@ -308,6 +308,7 @@ void MotorControlWidget::loadAxisFromManager(int axisId)
 {
     if (!m_motor) return;
     const MotorAxis& ax = m_motor->axisState(axisId);
+    m_curPosLabel->setText(QString("%1 mm").arg(ax.currentPosition, 0, 'f', 3));
     m_leadScrewSpin->setValue(ax.leadScrew);
     m_pulsePerRevSpin->setValue(ax.pulsePerRev);
     m_gearRatioSpin->setValue(ax.gearRatio);
@@ -319,6 +320,7 @@ void MotorControlWidget::loadAxisFromManager(int axisId)
     m_accelSpin->setValue(ax.acceleration);
     m_decelSpin->setValue(ax.deceleration);
     m_jogStepSpin->setValue(ax.jogStep);
+    onAxisStatusChanged(axisId, ax.rawStatus);  // 刷新状态指示灯
     m_leadScrewCheck->setChecked(ax.hasLeadScrew);
     m_softLimitPosCheck->setChecked(ax.hasSoftLimitPositive);
     m_softLimitNegCheck->setChecked(ax.hasSoftLimitNegative);
