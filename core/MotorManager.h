@@ -90,6 +90,7 @@ private:
     QTimer*              m_pollTimer;           // 轮询定时器
     bool                 m_polling;
     bool                 m_homingActive[16];     // 每个轴是否正在回零中
+    bool                 m_homingJustDone[16];   // 回零刚完成, 跳过本帧move检测
 };
 
 #endif // MOTORMANAGER_H

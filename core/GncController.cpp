@@ -190,7 +190,7 @@ bool GncController::moveAbsolute(short core, short axis, const TMoveAbsolutePrmE
 bool GncController::stopMove(short core, short axis)
 {
     long mask = 1L << (axis - 1);
-    if (gtsCall("GTN_Stop", GTN_Stop(core, mask, 0)) != 0) return false;
+    if (gtsCall("GTN_Stop", GTN_Stop(core, mask, 1)) != 0) return false;
     qDebug() << "[Gnc] stopMove axis=" << axis;
     return true;
 }

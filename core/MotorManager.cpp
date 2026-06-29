@@ -29,6 +29,7 @@ MotorManager::MotorManager(GncController* controller, QObject *parent)
         m_axes[i] = ax;
     }
     memset(m_homingActive, 0, sizeof(m_homingActive));
+    memset(m_homingJustDone, 0, sizeof(m_homingJustDone));
 
     // 创建轮询定时器
     m_pollTimer = new QTimer(this);
@@ -529,19 +530,21 @@ void MotorManager::onPollTimer()
             if (ax.homeMode == 20) {
                 // IO捕获模式: 等待硬件锁存 → Stop → ZeroPos
                 TTriggerStatusEx trigSts;
-                if (m_controller->getTriggerStatus(axisId, trigSts) && (trigSts.execute || trigSts.done)) {
+                if (m_controller->getTriggerStatus(axisId, trigSts) && trigSts.done) {
                     m_controller->stopMove(GNC_CORE_NUM, axisId);
                     ax.isHomed = true;
                     ax.isMoving = false;
                     m_homingActive[axisId - 1] = false;
+                    m_homingJustDone[axisId - 1] = true;
                     ax.currentPosition = 0.0;
                     m_controller->zeroPosition(GNC_CORE_NUM, axisId);
                     emit homeFinished(i + 1, true, 0);
                     emit positionUpdated(i + 1, 0.0);
-                    qDebug() << "MotorManager: 轴" << axisId << "IO捕获成功! latchPos=" << trigSts.position;
+                    qDebug() << "MotorManager: 轴" << axisId << "IO捕获成功";
                 } else if (!(status & 0x400) && ax.isMoving) {
                     ax.isMoving = false;
                     m_homingActive[axisId - 1] = false;
+                    m_homingJustDone[axisId - 1] = true;
                     qWarning() << "MotorManager: 轴" << axisId << "IO回零失败: 运动停止但未捕获";
                     emit homeFinished(i + 1, false, -1);
                 } else {
@@ -560,6 +563,7 @@ void MotorManager::onPollTimer()
                     ax.isHomed = true;
                     ax.isMoving = false;
                     m_homingActive[axisId - 1] = false;
+                    m_homingJustDone[axisId - 1] = true;
                     ax.currentPosition = 0.0;
                     emit homeFinished(i + 1, true, homeSts.stage);
                     emit positionUpdated(i + 1, 0.0);
@@ -567,14 +571,15 @@ void MotorManager::onPollTimer()
                 } else if (homeSts.error != 0 && homeSts.run == 0) {
                     ax.isMoving = false;
                     m_homingActive[axisId - 1] = false;
+                    m_homingJustDone[axisId - 1] = true;
                     qWarning() << "MotorManager: 轴" << axisId << "回零失败 error=" << homeSts.error << " stage=" << homeSts.stage;
                     emit homeFinished(i + 1, false, homeSts.stage);
                 }
             }
         }
 
-        // 检测点位运动完成 (只在非回零期间)
-        if (!m_homingActive[axisId - 1]) {
+        // 检测点位运动完成 (非回零期间; 刚结束的那一帧也跳过)
+        if (!m_homingActive[axisId - 1] && !m_homingJustDone[axisId - 1]) {
             bool moving = (status & 0x400) != 0;
             if (ax.isMoving && !moving) {
                 ax.isMoving = false;
@@ -584,6 +589,7 @@ void MotorManager::onPollTimer()
             }
             ax.isMoving = moving;
         }
+        m_homingJustDone[axisId - 1] = false;
 
         ax.rawStatus = status;
         emit axisStatusChanged(i + 1, status);
