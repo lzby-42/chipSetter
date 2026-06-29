@@ -236,7 +236,7 @@ bool GncController::getProfilePosition(short core, short axis, double& prfPos, u
 {
     Q_UNUSED(core);
     short rtn = GT_GetPrfPos(axis, &prfPos, 1, &clock);
-    prfPos = prfPos / 1000.0;
+    // prfPos 返回原始pulse, pulseToMm负责换算 (有导程→mm, 无导程→pulse直出)
     return gtsCall("GT_GetPrfPos", rtn) == 0;
 }
 
