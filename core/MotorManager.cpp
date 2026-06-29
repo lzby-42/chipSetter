@@ -204,8 +204,8 @@ void MotorManager::homeRequest(int axisId)
         // Step 1: 配置Trigger — 把GPI映射为硬件捕获源 (微秒级锁存)
         TTriggerPrm triggerPrm;
         memset(&triggerPrm, 0, sizeof(triggerPrm));
-        triggerPrm.latchType  = 1;    // MC_ENCODER
-        triggerPrm.latchIndex = 1;
+        triggerPrm.latchType  = 23;   // MC_ENCODER (不是1!)
+        triggerPrm.latchIndex = 1;    // 编码器编号
         triggerPrm.probeType  = 3;    // CAPTURE_PROBE
         triggerPrm.probeIndex = static_cast<short>(ax.triggerIndex);
         triggerPrm.sense      = static_cast<short>(ax.homeEdge);
