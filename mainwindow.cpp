@@ -288,10 +288,19 @@ void MainWindow::connectSignals()
     connect(m_motorManager, &MotorManager::axisStatusChanged,
             m_motorControl, &MotorControlWidget::onAxisStatusChanged);
 
-    // 应用 → 更新参数 + 自动保存
+    // 应用 → 更新参数 + 自动保存 (保护Widget不管的字段: homeDir/homeEdge/homeMode/triggerIndex)
     connect(m_motorControl, &MotorControlWidget::applyRequested,
             this, [this](int axisId, const MotorAxis& params) {
-        m_motorManager->updateAxisParams(axisId, params);
+        // 从当前轴状态保护不在Widget中的字段
+        MotorAxis current = m_motorManager->axisState(axisId);
+        MotorAxis merged  = params;
+        merged.homeDir      = current.homeDir;
+        merged.homeEdge     = current.homeEdge;
+        merged.homeMode     = current.homeMode;
+        merged.triggerIndex = current.triggerIndex;
+        merged.isActive     = current.isActive;
+        merged.jogStep      = current.jogStep;
+        m_motorManager->updateAxisParams(axisId, merged);
         m_motorManager->autoSave();
     });
     // 导出
