@@ -265,7 +265,9 @@ void MotorManager::homeRequest(int axisId)
     prm.homeOffset    = static_cast<long>(mmToPulse(axisId, ax.homeOffset));
     prm.searchHomeDistance    = 0;
     prm.searchIndexDistance   = 0;
-    prm.escapeStep    = static_cast<long>(qMax(hv * 50.0, 200.0));  // 至少200 pulse退离限位
+    prm.escapeStep    = ax.homeEscapeStep > 0
+        ? ax.homeEscapeStep
+        : static_cast<long>(qMax(hv * 10.0, 50.0));  // 自动: 至少50 pulse退离限位
 
     bool ok = m_controller->executeHome(GNC_CORE_NUM, axis, prm);
     if (ok) {
@@ -322,6 +324,7 @@ bool MotorManager::updateAxisParams(int axisId, const MotorAxis& params)
     ax.homeEdge           = params.homeEdge;
     ax.homeMode           = params.homeMode;
     ax.triggerIndex       = params.triggerIndex;
+    ax.homeEscapeStep     = params.homeEscapeStep;
     ax.hasLeadScrew       = params.hasLeadScrew;
     ax.hasSoftLimitPositive = params.hasSoftLimitPositive;
     ax.hasSoftLimitNegative = params.hasSoftLimitNegative;
@@ -365,6 +368,7 @@ QJsonObject MotorManager::axisToJson(const MotorAxis& ax) const
     obj["homeEdge"]       = ax.homeEdge;
     obj["homeMode"]       = ax.homeMode;
     obj["triggerIndex"]   = ax.triggerIndex;
+    obj["homeEscapeStep"]  = ax.homeEscapeStep;
     obj["isActive"]       = ax.isActive;
     return obj;
 }
@@ -390,6 +394,7 @@ void MotorManager::jsonToAxis(const QJsonObject& obj, MotorAxis& ax)
     ax.homeEdge        = obj["homeEdge"].toInt(0);
     ax.homeMode        = obj["homeMode"].toInt(10);
     ax.triggerIndex    = obj["triggerIndex"].toInt(-1);
+    ax.homeEscapeStep  = obj["homeEscapeStep"].toInt(0);
     ax.isActive        = obj["isActive"].toBool(ax.axisId != 4 && ax.axisId != 5 && ax.axisId != 6);
 }
 

@@ -296,9 +296,10 @@ void MainWindow::connectSignals()
         MotorAxis merged  = params;
         merged.homeDir      = current.homeDir;
         merged.homeEdge     = current.homeEdge;
-        merged.homeMode     = current.homeMode;
-        merged.triggerIndex = current.triggerIndex;
-        merged.isActive     = current.isActive;
+        merged.homeMode        = current.homeMode;
+        merged.triggerIndex    = current.triggerIndex;
+        merged.homeEscapeStep  = current.homeEscapeStep;
+        merged.isActive        = current.isActive;
         merged.jogStep      = current.jogStep;
         m_motorManager->updateAxisParams(axisId, merged);
         m_motorManager->autoSave();

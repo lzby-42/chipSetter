@@ -25,8 +25,9 @@ struct MotorAxis {
     double  homeOffset;             // 回零偏移 (mm), 内部mmToPulse转换
     int     homeDir;                // 回零搜索方向 (1=正向 -1=负向)
     int     homeEdge;               // 触发边沿 (0=下降沿 1=上升沿)
-    int     homeMode;               // GTN_GoHome模式 (10=LIMIT 20=HOME)
+    int     homeMode;               // GTN_GoHome模式 (10=LIMIT 20=HOME 35=当前位置)
     int     triggerIndex;           // Home触发GPI编号 (mode=20时使用, -1=本轴默认)
+    int     homeEscapeStep;         // 限位回零退离步数 (0=自动计算, >0=手动指定 pulse)
     bool    hasLeadScrew;           // 是否有导程 (旋转轴/曲柄=false)
     bool    hasSoftLimitPositive;   // 是否启用正向软限位
     bool    hasSoftLimitNegative;   // 是否启用负向软限位
@@ -51,7 +52,7 @@ struct MotorAxis {
         , gearRatio(DEFAULT_GEAR_RATIO)
         , softLimitPositive(9999.0), softLimitNegative(-9999.0)
         , homeVelocity(10.0), homeOffset(0.0), homeDir(1), homeEdge(0)
-        , homeMode(10), triggerIndex(-1)
+        , homeMode(10), triggerIndex(-1), homeEscapeStep(0)
         , hasLeadScrew(true), hasSoftLimitPositive(true), hasSoftLimitNegative(true), isActive(true)
         , isEnabled(false), isMoving(false), isHomed(false), isAlarm(false)
         , rawStatus(0)
