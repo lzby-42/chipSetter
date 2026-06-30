@@ -30,6 +30,10 @@ MotorManager::MotorManager(GncController* controller, QObject *parent)
     }
     memset(m_homingActive, 0, sizeof(m_homingActive));
     memset(m_homingJustDone, 0, sizeof(m_homingJustDone));
+    memset(m_homeEventId, 0, sizeof(m_homeEventId));
+    memset(m_homeTaskId, 0, sizeof(m_homeTaskId));
+    memset(m_homePhase, 0, sizeof(m_homePhase));
+    memset(m_homeFastCapturePos, 0, sizeof(m_homeFastCapturePos));
 
     // 创建轮询定时器
     m_pollTimer = new QTimer(this);
@@ -200,31 +204,26 @@ void MotorManager::homeRequest(int axisId)
     short axis = static_cast<short>(axisId);
     m_controller->clearStatus(GNC_CORE_NUM, axis, 1);
 
-    // mode=20(HOME): 硬件捕获模式 — GTN_SetTriggerPrm + 手动Trap + GetTriggerStatusEx
+    // mode=20(IO回零): 两阶段 — 快速搜索(GPI边沿→急停) → 反向退离 → 慢速校验(GPI边沿→急停→清零)
     if (ax.homeMode == 20 && ax.triggerIndex > 0) {
-        // Step 1: 配置Trigger — 把GPI映射为硬件捕获源 (微秒级锁存)
-        TTriggerEx trig;
-        memset(&trig, 0, sizeof(trig));
-        trig.latchType     = MC_ENCODER;   // MC_PROFILE — 步进电机锁规划位置
-        trig.latchIndex    = axis; // 本轴
-        trig.probeType     = CAPTURE_PROBE;    // CAPTURE_PROBE
-        trig.probeIndex    = static_cast<short>(ax.triggerIndex);
-        trig.sense         = static_cast<short>(ax.homeEdge);
-        trig.loop          = 1;    // 单次捕获
-        trig.windowOnly    = 0;
-        if (!m_controller->setTriggerEx(axis, trig)) {
-            qWarning() << "MotorManager: 轴" << axisId << "Trigger配置失败";
+        short eventId, taskId;
+        if (!m_controller->setupIoHomeCapture(GNC_CORE_NUM, axis,
+                                               static_cast<short>(ax.triggerIndex),
+                                               static_cast<short>(ax.homeEdge),
+                                               eventId, taskId)) {
+            qWarning() << "MotorManager: 轴" << axisId << "Event-Task配置失败";
             emit homeFinished(axisId, false, -1);
             return;
         }
+        m_homeEventId[axisId - 1] = eventId;
+        m_homeTaskId[axisId - 1]  = taskId;
+        m_homePhase[axisId - 1]   = 0;  // 快速搜索
 
-        // Step 2: Jog模式 — 持续匀速往搜索方向运动 (不设目标位置)
-        double hv;
-        if (ax.hasLeadScrew) {
-            hv = ax.homeVelocity > 0 ? mmToPulse(axisId, ax.homeVelocity) / 1000.0 : 10.0;
-        } else {
-            hv = ax.homeVelocity > 0 ? ax.homeVelocity : 10.0;
-        }
+        // Phase 0: 快速Jog — 往搜索方向
+        double hv = ax.hasLeadScrew
+            ? (ax.homeVelocity > 0 ? mmToPulse(axisId, ax.homeVelocity) / 1000.0 : 10.0)
+            : (ax.homeVelocity > 0 ? ax.homeVelocity : 10.0);
+        if (ax.homeDir < 0) hv = -hv;
 
         TJogPrm jogPrm;
         memset(&jogPrm, 0, sizeof(jogPrm));
@@ -232,6 +231,7 @@ void MotorManager::homeRequest(int axisId)
         jogPrm.dec = 0.1;
         if (!m_controller->startJog(axis, hv, jogPrm)) {
             qWarning() << "MotorManager: 轴" << axisId << "Jog启动失败";
+            m_controller->clearEventTask(GNC_CORE_NUM);
             emit homeFinished(axisId, false, -1);
             return;
         }
@@ -239,8 +239,9 @@ void MotorManager::homeRequest(int axisId)
         ax.isHomed = false;
         ax.isMoving = true;
         m_homingActive[axisId - 1] = true;
-        qDebug() << "MotorManager: 轴" << axisId << "IO捕获回零 GPI=" << ax.triggerIndex
-                 << " dir=" << ax.homeDir << " edge=" << ax.homeEdge;
+        qDebug() << "MotorManager: 轴" << axisId << "Phase0 快速搜索 GPI=" << ax.triggerIndex
+                 << " dir=" << ax.homeDir << " edge=" << ax.homeEdge
+                 << " vel=" << hv << " evtId=" << eventId;
         return;
     }
 
@@ -529,31 +530,109 @@ void MotorManager::onPollTimer()
         // 回零状态 — 只在主动触发回零期间检查
         if (ax.isHomed == false && m_homingActive[axisId - 1]) {
             if (ax.homeMode == 20) {
-                // IO捕获模式: 等待硬件锁存 → Stop → ZeroPos
-                TTriggerStatusEx trigSts;
-                if (m_controller->getTriggerStatus(axisId, trigSts) && trigSts.done) {
-                    m_controller->stopMove(GNC_CORE_NUM, axisId);
-                    ax.isHomed = true;
-                    ax.isMoving = false;
-                    m_homingActive[axisId - 1] = false;
-                    m_homingJustDone[axisId - 1] = true;
-                    ax.currentPosition = 0.0;
-                    m_controller->zeroPosition(GNC_CORE_NUM, axisId);
-                    emit homeFinished(i + 1, true, 0);
-                    emit positionUpdated(i + 1, 0.0);
-                    qDebug() << "MotorManager: 轴" << axisId << "IO捕获成功";
-                } else if (!(status & 0x400) && ax.isMoving) {
-                    ax.isMoving = false;
-                    m_homingActive[axisId - 1] = false;
-                    m_homingJustDone[axisId - 1] = true;
-                    qWarning() << "MotorManager: 轴" << axisId << "IO回零失败: 运动停止但未捕获";
-                    emit homeFinished(i + 1, false, -1);
-                } else {
-                    // 运动中, 每500ms报告一次等待状态
-                    static int tickCount = 0;
-                    if (++tickCount % 10 == 0) {  // 10 ticks = 500ms
-                        qDebug() << "MotorManager: 轴" << axisId << "IO回零搜索中... execute="
-                                 << trigSts.execute << " done=" << trigSts.done;
+                // 两阶段IO回零: Phase0快速搜索 → Phase1反向退离 → Phase2慢速校验
+                short phase = m_homePhase[axisId - 1];
+
+                // ---- Phase 0: 快速搜索 ----
+                if (phase == 0) {
+                    TEventStatus evtSts;
+                    if (m_controller->getEventStatus(GNC_CORE_NUM, m_homeEventId[axisId - 1], evtSts)
+                        && evtSts.eventHit) {
+                        // 快速捕获成功 → 记下位置, 清Event, 清状态, 反向退离
+                        m_controller->clearEventTask(GNC_CORE_NUM);
+                        m_controller->getProfilePosition(GNC_CORE_NUM, axisId,
+                                                         m_homeFastCapturePos[axisId - 1], clock);
+                        m_controller->clearStatus(GNC_CORE_NUM, axisId, 1);
+
+                        // 反向escape: 退200 pulse (远离传感器, 确保GPI恢复)
+                        double escapePulse = 200.0;
+                        if (ax.homeDir < 0) escapePulse = -escapePulse;
+                        double revVel = qAbs((ax.hasLeadScrew
+                            ? (ax.homeVelocity > 0 ? mmToPulse(i + 1, ax.homeVelocity) / 1000.0 : 10.0)
+                            : (ax.homeVelocity > 0 ? ax.homeVelocity : 10.0))) * 0.5;
+                        m_controller->moveRelative(GNC_CORE_NUM, axisId, -escapePulse,
+                                                    revVel, 0.1, 0.1);
+                        m_homePhase[axisId - 1] = 1;
+                        qDebug() << "MotorManager: 轴" << axisId
+                                 << "Phase0 捕获→Phase1 反向退离 escape=" << escapePulse
+                                 << " capPos=" << m_homeFastCapturePos[axisId - 1];
+                    } else if (!(status & 0x400) && ax.isMoving) {
+                        // 快速搜索中意外停止
+                        m_controller->clearEventTask(GNC_CORE_NUM);
+                        ax.isMoving = false;
+                        m_homingActive[axisId - 1] = false;
+                        m_homingJustDone[axisId - 1] = true;
+                        qWarning() << "MotorManager: 轴" << axisId << "Phase0 快速搜索失败";
+                        emit homeFinished(i + 1, false, -1);
+                    }
+                }
+                // ---- Phase 1: 反向退离 ----
+                else if (phase == 1) {
+                    if (!(status & 0x400) && ax.isMoving) {
+                        // 已退离传感器 → 配新Event-Task → 慢速再搜
+                        ax.isMoving = false;
+                        short gpiIdx = static_cast<short>(ax.triggerIndex);
+                        short edge   = static_cast<short>(ax.homeEdge);
+                        short evtId2, taskId2;
+                        if (!m_controller->setupIoHomeCapture(GNC_CORE_NUM, axisId,
+                                                               gpiIdx, edge, evtId2, taskId2)) {
+                            qWarning() << "MotorManager: 轴" << axisId << "Phase1 Event-Task配置失败";
+                            m_homingActive[axisId - 1] = false;
+                            m_homingJustDone[axisId - 1] = true;
+                            emit homeFinished(i + 1, false, -1);
+                            continue;
+                        }
+                        m_homeEventId[axisId - 1] = evtId2;
+                        m_homeTaskId[axisId - 1]  = taskId2;
+
+                        // 慢速Jog: homeVelocity的10%, 精度提高10倍
+                        double hv = ax.hasLeadScrew
+                            ? (ax.homeVelocity > 0 ? mmToPulse(i + 1, ax.homeVelocity) / 1000.0 : 10.0)
+                            : (ax.homeVelocity > 0 ? ax.homeVelocity : 10.0);
+                        double slowVel = qAbs(hv) * 0.1;
+                        if (slowVel < 0.5) slowVel = 0.5;  // 最低0.5 pulse/ms
+                        if (ax.homeDir < 0) slowVel = -slowVel;
+
+                        TJogPrm jogPrm;
+                        memset(&jogPrm, 0, sizeof(jogPrm));
+                        jogPrm.acc = 0.05;
+                        jogPrm.dec = 0.05;
+                        if (!m_controller->startJog(axisId, slowVel, jogPrm)) {
+                            qWarning() << "MotorManager: 轴" << axisId << "Phase1 Jog失败";
+                            m_controller->clearEventTask(GNC_CORE_NUM);
+                            m_homingActive[axisId - 1] = false;
+                            m_homingJustDone[axisId - 1] = true;
+                            emit homeFinished(i + 1, false, -1);
+                            continue;
+                        }
+                        ax.isMoving = true;
+                        m_homePhase[axisId - 1] = 2;
+                        qDebug() << "MotorManager: 轴" << axisId << "Phase1 退离完成→Phase2 慢速校验 vel=" << slowVel;
+                    }
+                }
+                // ---- Phase 2: 慢速校验 ----
+                else if (phase == 2) {
+                    TEventStatus evtSts;
+                    if (m_controller->getEventStatus(GNC_CORE_NUM, m_homeEventId[axisId - 1], evtSts)
+                        && evtSts.eventHit) {
+                        // 慢速捕获成功 → 清零
+                        m_controller->clearEventTask(GNC_CORE_NUM);
+                        ax.isHomed = true;
+                        ax.isMoving = false;
+                        m_homingActive[axisId - 1] = false;
+                        m_homingJustDone[axisId - 1] = true;
+                        ax.currentPosition = 0.0;
+                        m_controller->zeroPosition(GNC_CORE_NUM, axisId);
+                        emit homeFinished(i + 1, true, 0);
+                        emit positionUpdated(i + 1, 0.0);
+                        qDebug() << "MotorManager: 轴" << axisId << "Phase2 慢速校验成功→回零完成";
+                    } else if (!(status & 0x400) && ax.isMoving) {
+                        m_controller->clearEventTask(GNC_CORE_NUM);
+                        ax.isMoving = false;
+                        m_homingActive[axisId - 1] = false;
+                        m_homingJustDone[axisId - 1] = true;
+                        qWarning() << "MotorManager: 轴" << axisId << "Phase2 慢速校验失败";
+                        emit homeFinished(i + 1, false, -1);
                     }
                 }
             } else {

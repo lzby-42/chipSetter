@@ -91,6 +91,10 @@ private:
     bool                 m_polling;
     bool                 m_homingActive[16];     // 每个轴是否正在回零中
     bool                 m_homingJustDone[16];   // 回零刚完成, 跳过本帧move检测
+    short                m_homeEventId[16];       // IO回零事件ID (Event-Task)
+    short                m_homeTaskId[16];        // IO回零任务ID (Event-Task)
+    short                m_homePhase[16];          // 0=快速搜索 1=反向退离 2=慢速校验
+    double               m_homeFastCapturePos[16]; // 第一次捕获的pulse位置
 };
 
 #endif // MOTORMANAGER_H

@@ -187,6 +187,31 @@ bool GncController::moveAbsolute(short core, short axis, const TMoveAbsolutePrmE
     return true;
 }
 
+bool GncController::moveRelative(short core, short axis, double deltaPulse,
+                                    double vel, double acc, double dec)
+{
+    // 读取当前位置 → 计算目标 → Trap点位运动
+    double curPos = 0;
+    unsigned long clock;
+    if (gtsCall("GTN_GetPrfPos", GTN_GetPrfPos(core, axis, &curPos, 1, &clock)) != 0) {
+        return false;
+    }
+
+    TMoveAbsolutePrmEx prm;
+    memset(&prm, 0, sizeof(prm));
+    prm.pos      = curPos + deltaPulse;
+    prm.vel      = vel;
+    prm.acc      = acc;
+    prm.dec      = dec;
+    prm.percent  = 0;
+    prm.velStart = 0;
+    prm.velEnd   = 0;
+
+    qDebug() << "[Gnc] moveRelative axis=" << axis << " delta=" << deltaPulse
+             << " cur=" << curPos << " target=" << prm.pos;
+    return moveAbsolute(core, axis, prm);
+}
+
 bool GncController::stopMove(short core, short axis)
 {
     long mask = 1L << (axis - 1);
@@ -234,9 +259,11 @@ bool GncController::setTriggerEx(short axis, const TTriggerEx& trigger)
     t.windowOnly    = trigger.windowOnly;
 
     rtn = GTN_SetTriggerEx(GNC_CORE_NUM, axis, &t);
-    if (gtsCall("GTN_SetTriggerEx", rtn) != 0) return false;
+    if (gtsCall("GTN_SetTriggerEx", rtn) != 0) {
     qDebug() << "[Gnc] setTriggerEx axis=" << axis << " probeIndex=" << trigger.probeIndex
              << " sense=" << trigger.sense;
+    return false;
+    }
     return true;
 }
 
@@ -257,6 +284,91 @@ bool GncController::startJog(short axis, double vel, const TJogPrm& prm)
     if (gtsCall("GTN_Update", GTN_Update(GNC_CORE_NUM, mask)) != 0) return false;
     qDebug() << "[Gnc] startJog axis=" << axis << " vel=" << vel;
     return true;
+}
+
+// ============================================================
+// Event-Task — IO回零 (GPIO边沿 → 硬件急停)
+// ============================================================
+
+bool GncController::clearEventTask(short core)
+{
+    GTN_ClearEvent(core);
+    GTN_ClearTask(core);
+    GTN_ClearEventTaskLink(core);
+    return true;
+}
+
+bool GncController::setupIoHomeCapture(short core, short axis, short gpiIndex,
+                                        short homeEdge, short& outEventId, short& outTaskId)
+{
+    // 清除旧事件/任务/链接
+    GTN_ClearEvent(core);
+    GTN_ClearTask(core);
+    GTN_ClearEventTaskLink(core);
+
+    // 事件: GPI边沿触发 (UP=上升沿, DOWN=下降沿, 避免电平误触发)
+    TEvent event;
+    memset(&event, 0, sizeof(event));
+    event.loop          = 1;    // 单次触发
+    event.var.type      = WATCH_VAR_GPI;
+    event.var.index     = gpiIndex;
+    event.condition     = homeEdge ? WATCH_CONDITION_UP : WATCH_CONDITION_DOWN;
+    event.value         = 0;
+
+    short rtn = GTN_AddEvent(core, &event, &outEventId);
+    if (gtsCall("GTN_AddEvent", rtn) != 0) {
+        qDebug() << "[Gnc] setupIoHome: AddEvent failed, GPI=" << gpiIndex
+                 << " edge=" << homeEdge;
+        return false;
+    }
+
+    // 任务: 急停指定轴 (mask方式, option=0=急停)
+    TTaskStop task;
+    memset(&task, 0, sizeof(task));
+    task.mask   = 1L << (axis - 1);
+    task.option = 0;    // 0=急停(最小过冲), 1=平滑停止
+
+    rtn = GTN_AddTask(core, TASK_STOP, &task, &outTaskId);
+    if (gtsCall("GTN_AddTask", rtn) != 0) {
+        qDebug() << "[Gnc] setupIoHome: AddTask TASK_STOP failed, axis=" << axis;
+        return false;
+    }
+
+    // 链接
+    short linkId;
+    rtn = GTN_AddEventTaskLink(core, outEventId, outTaskId, &linkId);
+    if (gtsCall("GTN_AddEventTaskLink", rtn) != 0) {
+        qDebug() << "[Gnc] setupIoHome: AddEventTaskLink failed";
+        return false;
+    }
+
+    // 使能事件检测
+    rtn = GTN_EventOn(core, outEventId, 1);
+    if (gtsCall("GTN_EventOn", rtn) != 0) {
+        qDebug() << "[Gnc] setupIoHome: EventOn failed";
+        return false;
+    }
+
+    qDebug() << "[Gnc] setupIoHome: axis=" << axis << " GPI=" << gpiIndex
+             << " edge=" << homeEdge << " eventId=" << outEventId << " taskId=" << outTaskId;
+    return true;
+}
+
+bool GncController::enableEvent(short core, short eventId, short count)
+{
+    return gtsCall("GTN_EventOn", GTN_EventOn(core, eventId, count)) == 0;
+}
+
+bool GncController::disableEvent(short core, short eventId, short count)
+{
+    return gtsCall("GTN_EventOff", GTN_EventOff(core, eventId, count)) == 0;
+}
+
+bool GncController::getEventStatus(short core, short eventId, TEventStatus& sts)
+{
+    memset(&sts, 0, sizeof(sts));
+    return gtsCall("GTN_GetEventStatus",
+                   GTN_GetEventStatus(core, eventId, &sts)) == 0;
 }
 
 // ============================================================

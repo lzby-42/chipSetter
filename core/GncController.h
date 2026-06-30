@@ -74,6 +74,8 @@ public:
 
     // ---- 点位运动 ----
     bool moveAbsolute(short core, short axis, const TMoveAbsolutePrmEx& prm);
+    bool moveRelative(short core, short axis, double deltaPulse,
+                      double vel, double acc, double dec);  // 相对运动 (Trap)
     bool stopMove(short core, short axis);       // 平滑停止 (GT_Stop, 带减速)
 
     // ---- 回零 ----
@@ -82,6 +84,14 @@ public:
     bool setTriggerEx(short axis, const TTriggerEx& trigger);      // GPI→捕获源映射 (手册标准API)
     bool getTriggerStatus(short axis, TTriggerStatusEx& sts);
     bool startJog(short axis, double vel, const TJogPrm& prm);      // Jog持续运动
+
+    // ---- Event-Task IO回零 (绕过Trigger模块约束) ----
+    bool clearEventTask(short core);
+    bool setupIoHomeCapture(short core, short axis, short gpiIndex, short homeEdge,
+                            short& outEventId, short& outTaskId);
+    bool enableEvent(short core, short eventId, short count = 1);
+    bool disableEvent(short core, short eventId, short count = 1);
+    bool getEventStatus(short core, short eventId, TEventStatus& sts);
 
     // ---- 状态读取 ----
     bool getAxisStatus(short core, short axis, long& status, unsigned long& clock);
