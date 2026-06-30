@@ -258,20 +258,143 @@ GTN_UpdatePro(core, axisArray, count);  // Preferred over bitmask Update
 
 ## Homing (回零)
 
-```c
-THomePrm homePrm;
-homePrm.mode = HOME_MODE_LIMIT;             // Homing mode
-homePrm.moveVel = vel;
-homePrm.homeVel = lowVel;
-homePrm.homeAcc = acc;
-homePrm.homeDir = 1;                        // Direction
-homePrm.homeOffset = 0;                     // Offset from home position
+The controller has **two independent homing APIs**. The official documentation marks `GTN_ExecuteStandardHome` as **推荐指令 (recommended)** and `GTN_GoHome` as **不推荐指令 (deprecated for new projects)**.
 
-GTN_GoHome(core, axis, &homePrm);
-// Or two-step: GTN_Home + polling
+### Standard Home (`GTN_ExecuteStandardHome`) ★ — 36 CANopen DS402 modes, officially recommended
+
+Uses `TStandardHomePrm` struct. 36 predefined modes covering all common homing sequences. Edge polarity is controlled by the **drive's DI reverse setting** (configured in MotionStudio), not via API parameter. The "左侧边沿/右侧边沿" in mode descriptions refer to physical sensor position relative to motion direction, NOT electrical edges.
+
+**Standard Home modes for DI-based homing:**
+
+| Modes | Signals | Description |
+|---|---|---|
+| 3-6 | Home + Index | DI edge → search to Index (most precise) |
+| 7-10 | Home + PosLimit + Index | With positive limit |
+| 11-14 | Home + NegLimit + Index | With negative limit |
+| **19-22** | **Home only** | **DI trigger or release position = zero** ★ |
+| **23-26** | **Home + PosLimit** | DI edge on positive-limit side |
+| **27-30** | **Home + NegLimit** | DI edge on negative-limit side |
+| 33-34 | Index only | Encoder Z-signal only (no DI needed) |
+| 35 | None | Current position = zero (instant, no motion) |
+
+**Basic example (mode 19 — Home only, positive direction):**
+```c
+TStandardHomePrm prm = {0};
+prm.mode = 19;                     // ★ Home(DI) trigger or release = zero
+GTN_ExecuteStandardHome(core, axis, &prm);
+
+long sts; unsigned long clk;
+do { GTN_GetSts(core, axis, &sts, 1, &clk); }
+while (sts & 0x400);
+
+long homeSts;
+GTN_GetStandardHomeStatus(core, axis, &homeSts);
 ```
 
-Modes include limit switch homing, index (Z-signal) homing, etc. Full reference at `编程手册/回零功能/回零功能.html`.
+**Edge polarity for Standard Home:**
+- Configured in **MotionStudio** → drive DI reverse setting
+- If Home switch is normally-open (常开): set DI reverse=1
+- If Home switch is normally-closed (常闭): set DI reverse=0
+- Slave DI defaults to active-low → trigger = falling edge, leaving = rising edge
+
+### Smart Home (`GTN_GoHome`) — Legacy, not recommended for new projects
+
+Labeled as **不推荐指令** in official docs. Kept for backward compatibility. The key advantage over Standard Home is the `edge` field for explicit software control of capture polarity.
+
+```c
+typedef struct HomePrm {
+    short mode;              // Homing mode constant
+    short moveDir;           // Initial search direction: ≤0=negative, >0=positive
+    short indexDir;          // Index search direction: ≤0=negative, >0=positive
+    short edge;              // Capture edge: 0=falling, non-0=rising
+    short triggerIndex;      // -1=use axis's own trigger, [1,8]=use other axis's trigger
+    short pad1[3];           // Reserved, must be 0
+    double velHigh;          // Home search speed (pulse/ms)
+    double velLow;           // Index search speed (pulse/ms)
+    double acc;              // Acceleration (pulse/ms²)
+    double dec;              // Deceleration (pulse/ms²)
+    short smoothTime;        // S-curve smoothing time (ms)
+    short pad2[3];           // Reserved, must be 0
+    long homeOffset;          // Offset from home capture position (pulse)
+    long searchHomeDistance;  // Max Home search distance, 0=unlimited
+    long searchIndexDistance; // Max Index search distance, 0=unlimited
+    long escapeStep;          // Escape step when starting on limit switch (pulse)
+    long pad3[2];            // Reserved, must be 0
+} THomePrm;
+```
+
+**Mode constants:**
+
+| Constant | Value | Signals | Equivalent Standard Mode |
+|---|---|---|---|
+| `HOME_MODE_LIMIT` | 10 | Limit only | 17-18 |
+| `HOME_MODE_LIMIT_HOME` | 11 | Limit + Home | 7-14 |
+| `HOME_MODE_LIMIT_INDEX` | 12 | Limit + Index | 1-2 |
+| `HOME_MODE_LIMIT_HOME_INDEX` | 13 | Limit + Home + Index | 7-14 |
+| `HOME_MODE_HOME` | 20 | Home(DI) only | **19-22** |
+| `HOME_MODE_HOME_INDEX` | 22 | Home(DI) + Index | **3-6** |
+| `HOME_MODE_HOME_LEVEL` | 24 | Home level (no capture) | — |
+| `HOME_MODE_INDEX` | 30 | Index only | 33-34 |
+
+### Continuously Rotating Axes
+
+- **Standard Home**: mode 19-22 (Home only) or 3-6 (Home+Index for Index-latched precision)
+- **Smart Home (legacy)**: `HOME_MODE_HOME_INDEX` (22) with `edge` field for explicit edge control
+- Set `searchHomeDistance = 0` (Standard auto-handles this for unlimited rotation)
+- The Home sensor is **always wired to a dedicated DI** on the slave drive
+
+### Using Generic DI (GPI) as Home Signal — When MotionStudio Can't Map It
+
+If MotionStudio cannot map the desired DI channel as `MC_HOME`, use `GTN_SetTriggerPrm` to redirect the trigger source to a GPI channel via `CAPTURE_PROBE`.
+
+**★ Recommended path: Manual capture with Standard Home mode 35 (current pos = zero):**
+```c
+// Step 1: configure the trigger to use a GPI channel as capture source
+TTriggerPrm triggerPrm = {0};
+triggerPrm.latchType  = MC_ENCODER;
+triggerPrm.latchIndex = 1;
+triggerPrm.probeType  = CAPTURE_PROBE;   // ★ 3 — use general-purpose DI
+triggerPrm.probeIndex = 2;               // ★ GPI channel number (your DI)
+triggerPrm.sense      = 0;               // ★ 0=falling, 1=rising edge
+triggerPrm.loop       = 0;
+GTN_SetTriggerPrm(core, axis, &triggerPrm);
+
+// Step 2: Start Trap move to sweep for the GPI edge
+GTN_PrfTrap(core, axis);
+GTN_SetVel(core, axis, 5.0);
+GTN_SetPos(core, axis, 99999999);
+GTN_Update(core, 1 << (axis - 1));
+
+// Step 3: Wait for hardware capture
+long capSts = 0;
+do { GTN_GetTriggerStatusEx(core, axis, &capSts, NULL); }
+while (!(capSts & 0x1));
+
+// Step 4: Stop and zero
+GTN_Stop(core, 1 << (axis - 1), 0);
+Sleep(50);
+GTN_ZeroPos(core, axis, 1);
+```
+
+**Legacy path: configure Trigger, then call `GTN_GoHome` (不推荐):**
+```c
+// Step 1: same trigger config as above
+// Step 2: THomePrm homePrm = {0};
+homePrm.mode         = HOME_MODE_HOME;    // 20
+homePrm.triggerIndex = axis;             // point to configured trigger
+homePrm.edge         = 0;
+GTN_GoHome(core, axis, &homePrm);
+```
+
+**Probe type options for `TTriggerPrm.probeType`:**
+
+| Constant | Value | Signal source |
+|---|---|---|
+| `CAPTURE_HOME` | 1 | Dedicated Home DI (mapped in MotionStudio) |
+| `CAPTURE_INDEX` | 2 | Encoder Z-signal |
+| `CAPTURE_PROBE` | 3 | **General-purpose GPI (any DI channel)** |
+
+Key constraint: **Trigger, capture source (GPI), and latched encoder MUST be on the same network module.**
 
 ---
 

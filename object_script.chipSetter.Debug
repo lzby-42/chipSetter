@@ -9,8 +9,7 @@ debug/ProcessManager.o
 debug/DispensingPlatformController.o
 debug/PickupPlatformController.o
 debug/StatusBarWidget.o
-debug/MotorPtpWidget.o
-debug/MotorParamWidget.o
+debug/MotorControlWidget.o
 debug/IoMonitorWidget.o
 debug/AlarmListWidget.o
 debug/StatsWidget.o
@@ -30,8 +29,7 @@ debug/moc_ProcessManager.o
 debug/moc_DispensingPlatformController.o
 debug/moc_PickupPlatformController.o
 debug/moc_StatusBarWidget.o
-debug/moc_MotorPtpWidget.o
-debug/moc_MotorParamWidget.o
+debug/moc_MotorControlWidget.o
 debug/moc_IoMonitorWidget.o
 debug/moc_AlarmListWidget.o
 debug/moc_StatsWidget.o

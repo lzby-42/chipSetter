@@ -26,17 +26,24 @@ API documentation is local HTML at this site (built with MkDocs). Key paths:
 | Goal | First call(s) | Then... |
 |---|---|---|
 | **Init controller** | `GTN_OpenCard` (PCIe) or `GTN_Open` (EtherCAT) → `GTN_NetInit` → `GTN_LoadConfig` | `GTN_ClrSts` → `GTN_AxisOn` |
-| **Simple point-to-point move** | `GTN_PrfTrap` + `GTN_SetTrapPrm` | `GTN_SetVel` + `GTN_SetPos` → `GTN_Update` |
-| **One-call absolute move** | `GTN_MoveAbsoluteEx(core, axis, &prm)` | Poll `GTN_GetSts` bit 10 |
-| **Continuous jog** | `GTN_PrfJog` + `GTN_SetJogPrm` | `GTN_SetVel` → `GTN_UpdatePro` |
+| **Single-axis PT move** | `GTN_PrfTrap` + `GTN_SetTrapPrm` | `GTN_SetVel` + `GTN_SetPos` → `GTN_UpdatePro` ★ |
+| **Multi-axis synced PT** | Configure each axis → `GTN_Update` (bitmask) or `GTN_UpdatePro` (axis array) ★ | `GTN_UpdatePro` preferred for non-consecutive axes |
+| **One-call absolute move** | `GTN_MoveAbsoluteEx(core, axis, &prm)` ★ — simpler than Trap | Poll `GTN_GetSts` bit 10 |
+| **Continuous jog** | `GTN_PrfJog` + `GTN_SetJogPrm` | `GTN_SetVel` → `GTN_UpdatePro` ★ |
 | **Electronic gearing** | `GTN_PrfGear(core, slave)` | `GTN_SetGearPrm(slave)` → `GTN_Update` |
 | **Electronic cam** | `GTN_PrfFollowEx` | `GTN_FollowData` → `GTN_UpdatePro` |
 | **Multi-axis interpolation** | `GTN_CrdLine` / `GTN_ArcXYC` / `GTN_ArcXYR` | CrdData → CrdStart |
 | **PT/PVT motion** | `GTN_PrfPt` / `GTN_PrfPvt` | `GTN_PtData` → `GTN_PtStartPro` |
 | **Wait for motion done** | `GTN_GetSts(core, axis, &sts, 1, &clock)` | `sts & 0x400` (planner running bit 10) |
 | **Read actual position** | `GTN_GetPrfPos` (profile) / `GTN_GetEncPos` / `GTN_GetAxisEncPos` (encoder) | |
-| **Stop motion** | `GTN_Stop(core, mask, smooth)` | Smooth=0: emergency decel; smooth=1: decelerate to stop |
-| **Home an axis** | `GTN_Home` or `GTN_GoHome` | See `编程手册/回零功能/` |
+| **Stop motion** | `GTN_StopPro(core, &axis, 1, smooth)` ★ — or `GTN_Stop(core, mask, smooth)` | Smooth=0: emergency decel; smooth=1: decelerate to stop |
+| **Multi-axis enable** | `GTN_MultiAxisOn(core, axisArray, count)` ★ | `GTN_MultiAxisOff` to disable |
+| **Use GPI as Home trigger** | `GTN_SetTriggerPrm` → `CAPTURE_PROBE` → `GTN_GoHome`(triggerIndex) | See patterns.md "通用 DI（GPI）替代专用 Home DI" |
+| **Home an axis** | `GTN_ExecuteStandardHome(core, axis, &prm)` ★ — 36种CANopen DS402标准模式 | `prm.mode`: 3-6/19-22=Home(DI)触发, 23-30=Home+限位, 33-34=仅Index, 35=当前位置即零点 |
+| **Home status & params** | `GTN_GetStandardHomeStatus` / `GTN_GetStandardHomePrm` ★ | Legacy: `GTN_GetHomeStatus` / `GTN_GetHomePrm` (不推荐) |
+| **DI-edge home (rotary axis)** | Standard mode 19-22 (Home only) or 3-6 (Home+Index) | Edge polarity via MotionStudio DI reverse setting |
+| **Legacy Smart Home (不推荐)** | `GTN_GoHome(core, axis, &homePrm)` — 保留用于兼容，`THomePrm.edge`可直接设边沿 | 新项目应使用 `GTN_ExecuteStandardHome` |
+| **Use GPI as Home trigger** | `GTN_SetTriggerPrm` → `CAPTURE_PROBE` → `GTN_ExecuteStandardHome` or `GTN_GoHome` | See patterns.md "通用 DI（GPI）替代专用 Home DI" |
 | **Laser on/off** | `GTN_LaserOn` / `GTN_LaserOff` | `GTN_LaserPowerMode` → `GTN_LaserPrfCmd` |
 | **PSO (position output)** | `GTN_SetPosCompareModeEx` | `GTN_PosCompareStart` |
 | **Event→Task (interrupt)** | `GTN_AddEvent` → `GTN_AddTaskPro` → `GTN_AddEventTaskLink` | `GTN_EventOn` |
@@ -158,23 +165,27 @@ Channel-based with dynamic buffer management.
 
 ## Axis Status Bitfield (`GTN_GetSts` output)
 
-| Bit | Decimal | Meaning |
-|---|---|---|
-| 1 | 2 | Drive alarm |
-| 4 | 16 | Following error |
-| 5 | 32 | Positive limit |
-| 6 | 64 | Negative limit |
-| 7 | 128 | Smooth stop IO |
-| 8 | 256 | Emergency stop IO |
-| 9 | 512 | Motor enabled |
-| **10** | **1024 (0x400)** | **Planner running** |
-| 11 | 2048 | In position |
+| Bit | Hex | Decimal | Meaning |
+|---|---|---|---|
+| 0 | 0x001 | 1 | Emergency stop (alarm) |
+| 1 | 0x002 | 2 | Drive alarm |
+| 2 | 0x004 | 4 | Reserved |
+| 3 | 0x008 | 8 | Reserved |
+| 4 | 0x010 | 16 | Following error exceeded |
+| 5 | 0x020 | 32 | Positive limit triggered |
+| 6 | 0x040 | 64 | Negative limit triggered |
+| 7 | 0x080 | 128 | Smooth stop IO |
+| 8 | 0x100 | 256 | Emergency stop IO |
+| 9 | 0x200 | 512 | Motor enabled (AxisOn) |
+| **10** | **0x400** | **1024** | **Planner running** ← poll this for motion done |
+| 11 | 0x800 | 2048 | In position |
+| 12-31 | — | — | Extended status (use `GTN_GetStsEx` for full details) |
 
 ## Detailed Reference
 
-- **[workflows.md](workflows.md)** — **Start here for coding.** 20 complete, copy-paste-ready workflows for every motion mode, each with init → motion → poll-loop → verify. Includes shared helpers and a full application template.
-- **[api-core.md](api-core.md)** — Core motion API signatures: Trap, Jog, PT/PVT, Gear, Follow, Interpolation, Homing, Axis ops, Hardware IO
-- **[api-advanced.md](api-advanced.md)** — Advanced API: Laser, PSO, Event-Task, Command List, Compensation, Galvo, Safety, EtherCAT, Lua
-- **[patterns.md](patterns.md)** — Cross-cutting patterns: polling, multi-axis, DMA, hardware binding, common mistakes, debugging tips, MotionStudio workflow
+- **[workflows.md](workflows.md)** — **Start here for coding.** 20+ complete, copy-paste-ready workflows for every motion mode and homing scenario (including GPI-as-Home), each with init → motion → poll-loop → verify. Includes shared helpers and a full application template.
+- **[api-core.md](api-core.md)** — Core motion API signatures: Trap, Jog, PT/PVT, Gear, Follow, Interpolation, Homing (Smart Home + Standard Home + GPI), Axis ops, Hardware IO, Trigger
+- **[api-advanced.md](api-advanced.md)** — Advanced API: Laser, PSO, Event-Task, Command List, Compensation, Galvo, Safety, EtherCAT, High-Speed Capture (Trigger/Probe/TouchProbe), Lua
+- **[patterns.md](patterns.md)** — Cross-cutting patterns: polling, multi-axis, DMA, hardware binding, homing mode selection, GPI-as-Home workaround, common mistakes, debugging tips, MotionStudio workflow
 
 For the full API reference, consult the local documentation pages under `编程手册/` and `指令说明/`.

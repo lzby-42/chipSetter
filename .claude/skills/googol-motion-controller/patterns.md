@@ -264,6 +264,9 @@ GTN_CrdHsOff(crd);
 | Forgetting `GTN_CommandListDataEnd` | Data may stay in buffer un-flushed. Always call before `StartCommandList` |
 | Laser/PSO not working after config | Check `GTN_SetTerminalPermitEx` — hardware channels may not be bound |
 | Compensations not showing in profile position | Compensations are added to OUTPUT, not profile. Read encoder for compensated position |
+| GPI homing: GoHome returns error | `CAPTURE_PROBE` trigger may not be accepted. Fall back to manual Trap + `GTN_GetTriggerStatusEx` + Stop + ZeroPos |
+| GPI homing: captured position wrong | `TTriggerPrm.sense` and `THomePrm.edge` must agree (both rising or both falling) |
+| GPI homing: axis stops before DI triggers | Set `searchHomeDistance = 0` for rotary axes, or increase distance on linear axes |
 
 ## Debugging Tips
 
@@ -283,3 +286,42 @@ The MotionStudio PC tool generates the two critical config files:
 2. **System configuration CFG** (from axis/IO/control mapping) → `GTN_LoadConfig`
 
 Typical workflow: MotionStudio → generate files → copy to app directory → app loads them via `GTN_NetInit` + `GTN_LoadConfig`.
+
+## Homing Patterns (回零)
+
+### Which homing API to choose?
+
+> **官方推荐**: `GTN_ExecuteStandardHome` ★ | `GTN_GoHome` = 不推荐指令（保留用于兼容）
+
+| Scenario | API ★ | Why |
+|---|---|---|
+| DI 做零点，边沿在 MotionStudio 配置 | `GTN_ExecuteStandardHome` mode 19-22 | 官方推荐，CANopen DS402 标准 |
+| DI + Z 信号（高精度旋转轴） | `GTN_ExecuteStandardHome` mode 3-6 | DI→Index，重复精度最高 |
+| 仅编码器 Index（无 DI） | `GTN_ExecuteStandardHome` mode 33-34 | 只需 Z 信号 |
+| 当前位置直接做零点（不动轴） | `GTN_ExecuteStandardHome` mode 35 | 即时，无运动 |
+| 需要在 API 里直接控制边沿极性 | `GTN_GoHome` (不推荐) | `THomePrm.edge` 字段 — 唯一使用场景 |
+| GPI 替代 Home DI | `GTN_SetTriggerPrm(CAPTURE_PROBE)` + 手动 Trap | MotionStudio 不支持时才用 |
+
+### 持续旋转轴的回零要点
+
+1. **首选 `GTN_ExecuteStandardHome` mode 3-6**（Home+Index）— 重复定位精度可达编码器一个刻度
+2. **次选 mode 19-22**（仅 Home/DI）— 如果没有 Z 信号
+3. **`searchHomeDistance = 0`** — Standard Home 自动处理不限距
+4. **边沿极性在 MotionStudio 配置** — 常开=reverse 1，常闭=reverse 0；从站 DI 默认低电平有效
+5. **"左侧边沿"≠下降沿，"右侧边沿"≠上升沿** — 左/右指传感器在运动方向上的物理位置
+
+### 通用 DI（GPI）替代专用 Home DI（MotionStudio 无法映射时）
+
+当 MotionStudio 无法将通用 DI 配置为 Home 类型（`MC_HOME`）时，通过 API 两步走：
+
+1. **用 `GTN_SetTriggerPrm` 把 Trigger 的捕获源改成 GPI**：`probeType = CAPTURE_PROBE(3)`, `probeIndex = <你的DI通道>`, `sense = 0/1`
+2. **手动 Trap 搜索 + 轮询 `GTN_GetTriggerStatusEx`** → 捕获后 `GTN_Stop` + `GTN_ZeroPos`（推荐路径）
+3. **备选（不推荐）**：`GTN_GoHome` 设置 `triggerIndex` 指向该 Trigger — 可能不接受 `CAPTURE_PROBE`
+
+三种捕获模式的信号来源：
+
+| `probeType` | 信号来源 | 需要 MotionStudio 配置？ |
+|-------------|---------|------------------------|
+| `CAPTURE_HOME` (1) | 专用 Home DI | **是** — MotionStudio 里映射 |
+| `CAPTURE_INDEX` (2) | 编码器 Z 信号 | 否 |
+| `CAPTURE_PROBE` (3) | **通用 GPI（任意 DI）** | **否** — `probeIndex` 直接指定 |

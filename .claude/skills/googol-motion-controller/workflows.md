@@ -415,41 +415,181 @@ short Demo_PVT(short core, short axis) {
 
 ## 10. 回零 (Homing)
 
+> **官方推荐**: `GTN_ExecuteStandardHome` ★ | **不推荐**: `GTN_GoHome` (保留用于兼容)
+
+### 10a. Standard Home — Home(DI) 边沿回零 ★ 推荐
+
 ```c
-short Demo_Home(short core, short axis) {
-    THomePrm homePrm = {0};
-    homePrm.mode       = HOME_MODE_LIMIT;      // limit-switch homing
-    homePrm.moveVel    = 20.0;                 // fast approach speed
-    homePrm.homeVel    = 5.0;                  // slow creep speed
-    homePrm.homeAcc    = 1.0;
-    homePrm.homeDir    = -1;                   // direction (1 or -1)
-    homePrm.homeOffset = 0;                    // offset from home position
-    homePrm.indexDir   = 0;                    // index (Z-signal) direction
-    homePrm.indexCount = 0;                    // 0 = no index
+// ★ 官方推荐方式。边沿极性在 MotionStudio 的 DI reverse 里配置，不需 API 参数
+short Demo_StandardHome_DI(short core, short axis) {
+    TStandardHomePrm prm = {0};
+    prm.mode = 19;                   // Home(DI) 触发或离开 = 零点，正方向
+    // 常用模式:
+    //  3-6:  Home + Index (最高精度)
+    // 19-22: Home only (仅 DI)
+    // 23-26: Home + 正限位
+    // 27-30: Home + 负限位
+    // 33-34: 仅 Index (无 DI)
+    //   35: 当前位置 = 零点 (即时)
 
-    CK("GTN_GoHome", GTN_GoHome(core, axis, &homePrm));
+    CK("GTN_ExecuteStandardHome", GTN_ExecuteStandardHome(core, axis, &prm));
 
-    // Wait for homing complete
     long sts; unsigned long clk;
-    do {
-        CK("GTN_GetSts", GTN_GetSts(core, axis, &sts, 1, &clk));
-        if (sts & 0x400) {
-            long pos;
-            GTN_GetPrfPos(core, axis, &pos, 1, &clk);
-            printf("\rHoming... pos=%ld", pos);
-        }
-    } while (sts & 0x400);
+    do { CK("GTN_GetSts", GTN_GetSts(core, axis, &sts, 1, &clk)); }
+    while (sts & 0x400);
 
-    // After homing, check home-captured flag
     long homeSts;
-    GTN_GetHomeStatus(core, axis, &homeSts);
-    printf("\nHome done. Status=%ld\n", homeSts);
+    GTN_GetStandardHomeStatus(core, axis, &homeSts);
+    printf("Home done. Status=%ld\n", homeSts);
 
-    // Now set soft limits relative to home
     CK("GTN_ZeroPos",       GTN_ZeroPos(core, axis, 1));
     CK("GTN_SetSoftLimitEx", GTN_SetSoftLimitEx(core, axis, 500000.0, -1000.0));
     CK("GTN_LmtsOnEx",      GTN_LmtsOnEx(core, axis));
 
+    return CMD_SUCCESS;
+}
+```
+
+### 10b. Standard Home — Home + Index ★ 旋转轴推荐（最高精度）
+
+```c
+short Demo_StandardHome_DI_Index(short core, short axis) {
+    TStandardHomePrm prm = {0};
+    prm.mode = 3;   // 正方向, Home 左侧边沿, 然后反方向搜 Index
+
+    CK("GTN_ExecuteStandardHome", GTN_ExecuteStandardHome(core, axis, &prm));
+
+    long sts; unsigned long clk;
+    do { CK("GTN_GetSts", GTN_GetSts(core, axis, &sts, 1, &clk)); }
+    while (sts & 0x400);
+
+    CK("GTN_ZeroPos",       GTN_ZeroPos(core, axis, 1));
+    CK("GTN_SetSoftLimitEx", GTN_SetSoftLimitEx(core, axis, 500000.0, -1000.0));
+    CK("GTN_LmtsOnEx",      GTN_LmtsOnEx(core, axis));
+
+    return CMD_SUCCESS;
+}
+```
+
+### 10c. Standard Home — 当前位置直接做零点
+
+```c
+short Demo_StandardHome_CurrentPos(short core, short axis) {
+    TStandardHomePrm prm = {0};
+    prm.mode = 35;  // 当前位置 = 零点，不需要运动
+
+    CK("GTN_ExecuteStandardHome", GTN_ExecuteStandardHome(core, axis, &prm));
+    CK("GTN_ZeroPos",             GTN_ZeroPos(core, axis, 1));
+
+    return CMD_SUCCESS;
+}
+```
+
+### 10d. Smart Home (Legacy) — 带显式 edge 控制
+
+```c
+// 不推荐用于新项目。仅当需要在 API 中直接控制捕获边沿（而非 MotionStudio 配置）时使用
+short Demo_SmartHome_DI(short core, short axis, short risingEdge) {
+    THomePrm homePrm = {0};
+    homePrm.mode              = HOME_MODE_HOME;          // 20
+    homePrm.moveDir           = 1;
+    homePrm.edge              = risingEdge ? 1 : 0;      // ★ 唯一优势：API 直接控边沿
+    homePrm.triggerIndex      = -1;
+    homePrm.velHigh           = 10.0;
+    homePrm.acc               = 1.0;
+    homePrm.dec               = 1.0;
+    homePrm.searchHomeDistance = 0;
+
+    CK("GTN_GoHome", GTN_GoHome(core, axis, &homePrm));
+
+    long sts; unsigned long clk;
+    do { CK("GTN_GetSts", GTN_GetSts(core, axis, &sts, 1, &clk)); }
+    while (sts & 0x400);
+
+    long homeSts;
+    GTN_GetHomeStatus(core, axis, &homeSts);
+    printf("Home done. Status=%ld\n", homeSts);
+
+    CK("GTN_ZeroPos",       GTN_ZeroPos(core, axis, 1));
+    CK("GTN_SetSoftLimitEx", GTN_SetSoftLimitEx(core, axis, 500000.0, -1000.0));
+    CK("GTN_LmtsOnEx",      GTN_LmtsOnEx(core, axis));
+
+    return CMD_SUCCESS;
+}
+```
+
+### 10e. 限位回零 (Smart Home Legacy)
+
+```c
+short Demo_Home_Limit(short core, short axis) {
+    THomePrm homePrm = {0};
+    homePrm.mode       = HOME_MODE_LIMIT;      // 10
+    homePrm.moveDir    = -1;
+    homePrm.velHigh    = 20.0;
+    homePrm.velLow     = 5.0;
+    homePrm.acc        = 1.0;
+    homePrm.dec        = 1.0;
+    homePrm.escapeStep = 5000;
+
+    CK("GTN_GoHome", GTN_GoHome(core, axis, &homePrm));
+
+    long sts; unsigned long clk;
+    do { CK("GTN_GetSts", GTN_GetSts(core, axis, &sts, 1, &clk)); }
+    while (sts & 0x400);
+
+    CK("GTN_ZeroPos", GTN_ZeroPos(core, axis, 1));
+    return CMD_SUCCESS;
+}
+```
+
+### 10f. 通用 DI（GPI）作为 Home 捕获源 ★
+
+```c
+// MotionStudio 无法将 GPI 映射为 Home 时的方案
+// 配置 Trigger → 手动 Trap 搜索 → 硬件捕获 → 停止 → 清零
+short Demo_Home_GPI(short core, short axis, short gpiChannel, short risingEdge)
+{
+    CK("GTN_ClrSts", GTN_ClrSts(core, axis, 1));
+    CK("GTN_AxisOn", GTN_AxisOn(core, axis));
+
+    // Step 1: configure Trigger with GPI as capture source
+    TTriggerPrm triggerPrm = {0};
+    triggerPrm.latchType  = MC_ENCODER;
+    triggerPrm.latchIndex = 1;
+    triggerPrm.probeType  = CAPTURE_PROBE;             // ★ 3
+    triggerPrm.probeIndex = gpiChannel;
+    triggerPrm.sense      = risingEdge ? 1 : 0;
+    triggerPrm.loop       = 0;
+    CK("GTN_SetTriggerPrm", GTN_SetTriggerPrm(core, axis, &triggerPrm));
+
+    // Step 2: Trap move — slow sweep
+    CK("GTN_PrfTrap",    GTN_PrfTrap(core, axis));
+    TTrapPrm trapPrm = {1.0, 1.0, 0, 0};
+    CK("GTN_SetTrapPrm", GTN_SetTrapPrm(core, axis, &trapPrm));
+    CK("GTN_SetVel",     GTN_SetVel(core, axis, 5.0));
+    CK("GTN_SetPos",     GTN_SetPos(core, axis, 99999999));
+    CK("GTN_Update",     GTN_Update(core, 1 << (axis - 1)));
+
+    // Step 3: wait for hardware capture
+    long sts, capSts = 0; unsigned long clk;
+    int timeout = 60000;
+    while (!(capSts & 0x1) && timeout > 0) {
+        Sleep(1); timeout--;
+        GTN_GetSts(core, axis, &sts, 1, &clk);
+        GTN_GetTriggerStatusEx(core, axis, &capSts, NULL);
+        if (!(sts & 0x400)) break;
+    }
+    if (timeout <= 0) { printf("GPI capture timeout!\n"); return -1; }
+
+    // Step 4: stop + zero
+    GTN_Stop(core, 1 << (axis - 1), 0);
+    Sleep(50);
+
+    long latchPos = 0;
+    GTN_GetTriggerStatusEx(core, axis, &capSts, &latchPos);
+    printf("GPI edge captured at encoder: %ld\n", latchPos);
+
+    CK("GTN_ZeroPos", GTN_ZeroPos(core, axis, 1));
     return CMD_SUCCESS;
 }
 ```
@@ -972,7 +1112,8 @@ int main() {
 | Gear / Follow | Master + Slave both done | Poll both `GTN_GetSts`; slave may lag |
 | Interpolation (Crd*) | `crdSts & 0x01` | Poll `GTN_CrdGetStatus`; also check buffer space |
 | DMA (CrdDma) | `crdSts & 0x01` | Poll `GTN_CrdGetStatus`; DMA auto-flushes |
-| Homing | `sts & 0x400` | Poll `GTN_GetSts`; then check `GTN_GetHomeStatus` |
+| Homing (Smart Home) | `sts & 0x400` | Poll `GTN_GetSts`; then check `GTN_GetHomeStatus` |
+| Homing (GPI as Home) | `sts & 0x400` or manual | ★ 10d: `GTN_SetTriggerPrm` + `GTN_GoHome`. 10e: manual Trap + `GTN_GetTriggerStatusEx` |
 | PSO | Axis `sts & 0x400` | PSO runs alongside motion; poll `GTN_PosCompareInfo` for count |
 | Command List | `listSts & 0x01` | Poll `GTN_GetCommandListStatus`; check axis status too |
 | Event-Task | `evtSts.eventHit` | Poll `GTN_GetEventStatus` + `GTN_GetSts` for triggered motion |
