@@ -205,12 +205,10 @@ void MotorManager::homeRequest(int axisId)
         // Step 1: 配置Trigger — 把GPI映射为硬件捕获源 (微秒级锁存)
         TTriggerPrm triggerPrm;
         memset(&triggerPrm, 0, sizeof(triggerPrm));
-        triggerPrm.latchType  = 31;   // MC_PROFILE (步进电机锁规划位置)
-        triggerPrm.latchIndex = 1;
         triggerPrm.probeType  = 3;    // CAPTURE_PROBE
-        triggerPrm.probeIndex = static_cast<short>(ax.triggerIndex);
-        triggerPrm.sense      = static_cast<short>(ax.homeEdge);
-        triggerPrm.loop       = 0;
+        triggerPrm.probeIndex = static_cast<short>(ax.triggerIndex);  // GPI
+        triggerPrm.sense      = static_cast<short>(ax.homeEdge);       // 0=falling,1=rising
+        // 其他字段留0: 不锁存位置, 不限制窗口, 单次触发
         if (!m_controller->setTriggerPrm(axis, triggerPrm)) {
             qWarning() << "MotorManager: 轴" << axisId << "Trigger配置失败";
             emit homeFinished(axisId, false, -1);
