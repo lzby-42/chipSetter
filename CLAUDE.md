@@ -12,6 +12,7 @@ Qt 5.15.2 C++ 上位机，运行于固高 GNC-C610 工控机 (Win10, 192.168.1.2
 2. **日志位置**：`logs/chipsetter_年月日_时分秒.log`（每次启动生成新文件，自动创建logs目录）
 3. **电机参数持久化**：`motor_params.json`（exe同目录），启动自动加载，点击"应用"自动保存（写临时文件+rename防断电）
 4. **轴参数适用性**：旋转轴/曲柄可取消导程勾选，气缸轴可取消软限位勾选，JSON持久化
+5. **运动控制器 API**：使用 `.claude/skills/googol-motion-controller/` skill 查询 GTN_* API 用法、模式、触发器等
 
 ## 硬件架构
 
@@ -20,10 +21,10 @@ UI (widgets/) ──Signal/Slot──> Core (core/) ──GncController──> G
                                 │                                  └── GNC-C610 运动控制器
                                 │                                      └── 19路DI (X0-X18, GPI1-19)
                                 │                                      └── 4路DO (Y9-Y12, GPO9-12)
-                                │                                      └── 13轴 (胶盘, 点胶, 取晶...)
+                                │                                      └── 16轴 (胶盘, 点胶, 取晶...)
                                 ├── ProcessManager (9步状态机)
                                 │     ├── DispensingPlatformController (轴2+3)
-                                │     └── PickupPlatformController (轴10+11)
+                                │     └── PickupPlatformController (轴13+14)
                                 ├── AlarmLogger (报警触发/恢复/历史)
                                 └── StatsCollector (产量/时长/节拍)
 ```
@@ -110,16 +111,17 @@ cd tests && qmake tests.pro && make -f Makefile.Debug -j4
 | `core/HardwareConfig.h` | 常量定义：AXIS_COUNT=16, DI_COUNT=19, DO_COUNT=4, DO_INDEX_BASE=9, DI_AXIS_MAP |
 | `core/GncController.h/.cpp` | **GTS SDK 封装**：GT_Open/GT_GetDi/GT_SetDoBit 等全部硬件操作，SDK 错误追踪 |
 | `core/IoManager.h/.cpp` | IO 管理器：50ms 轮询 DI/DO，变化检测，发出 diChanged/doChanged 信号 |
-| `core/MotorManager.h/.cpp` | 13 轴状态管理，运动控制 |
+| `core/MotorManager.h/.cpp` | 16 轴状态管理，运动控制 |
 | `core/ProcessManager.h/.cpp` | 9 步工艺状态机，持有 DispensingPlatform/PickupPlatform 引用 |
 | `core/DispensingPlatformController.h/.cpp` | 点胶平台（轴2=X, 轴3=Y）：X→Y 回零序列 + 双轴并发点位移动，错误上报 AlarmLogger |
-| `core/PickupPlatformController.h/.cpp` | 取晶平台（轴10=X, 轴11=Y）：X→Y 回零序列 + 双轴并发点位移动，错误上报 AlarmLogger |
+| `core/PickupPlatformController.h/.cpp` | 取晶平台（轴13=X, 轴14=Y）：X→Y 回零序列 + 双轴并发点位移动，错误上报 AlarmLogger |
 | `core/AlarmLogger.h/.cpp` | 报警管理器：报警触发/恢复，历史记录，活跃计数，自增 ID |
 | `core/StatsCollector.h/.cpp` | 生产统计：产量、运行时长（小时）、平均节拍（秒/件），1秒定时器更新 |
 | `models/MotorAxis.h` | 轴数据模型：位置/速度/限位/回零(3模式)/导程/软限位/状态标志 |
 | `models/IoSignal.h` | IO 信号数据模型（ID/类型/名称/值） |
 | `models/AlarmRecord.h` | 报警记录数据模型（ID/时间戳/级别/来源/消息/已解决） |
-| `mainwindow.h/.cpp` | 主窗口：创建全部 8 个 Core 模块、11 个 Widget，信号连线总控 |
+| `widgets/MotorControlWidget.h/.cpp` | 调试模式核心：轴选择按钮组 + PTP运动 + 参数编辑 三合一（替代旧 MotorPtpWidget + MotorParamWidget） |
+| `mainwindow.h/.cpp` | 主窗口：创建全部 8 个 Core 模块、10 个 Widget，信号连线总控 |
 | `main.cpp` | 入口：文件日志初始化，QSS 加载 |
 | `googol/` | GTS SDK 文件：gts.h, gts.lib, gts.dll, gt_rn.dll, core1_20260625.cfg |
 | `scripts/workflow.ps1` | **统一调度脚本**：编译→打包→部署→启动/停止（test/debug/quick/build 等 7 个命令） |
@@ -217,13 +219,13 @@ IoManager::onPollTimer()  [每50ms]
 │ │  │ StepDetailPanel: 子步骤 | 参数(可编辑) | 实时   │   │   │
 │ │  └───────────────────────────────────────────────┘   │   │
 │ │  ┌─ 设备状态 ────────────────────────────────────┐   │   │
-│ │  │ DeviceStatusWidget: 13轴灯 ● + 急停 + GNC连接  │   │   │
+│ │  │ DeviceStatusWidget: 16轴灯 ● + 急停 + GNC连接  │   │   │
 │ │  └───────────────────────────────────────────────┘   │   │
 │ │                                      ┌─ 报警列表 ─┐   │   │
 │ │                                      │ 右栏        │   │   │
 │ └──────────────────────────────────────┴─────────────┘   │   │
 │ ┌[1] 调试模式 ─────────────────────────────────────────┐   │   │
-│ │ 左(420px): MotorPtpWidget + MotorParamWidget          │   │
+│ │ 左(420px): MotorControlWidget (PTP+参数合一)          │   │
 │ │ 中(stretch): IoMonitorWidget + StatsWidget            │   │
 │ │ 右(220px): AlarmListWidget + 视觉预留                  │   │
 │ └───────────────────────────────────────────────────────┘   │
@@ -271,7 +273,7 @@ IoManager::onPollTimer()  [每50ms]
 - 存储变量名为 `m_paramValues` (QPair<QLabel*, QLineEdit*>)，不是老的 `m_paramLabels`
 
 **DeviceStatusWidget:**
-- 13 个轴指示灯 ● (灰色未使能/绿色就绪/蓝色运动中/红色报警)
+- 16 个轴指示灯 ● (灰色未使能/绿色就绪/蓝色运动中/红色报警)
 - 急停状态标签 + IO 活跃信号摘要(最多3个) + GNC 连接状态
 
 ### 底部操作栏 6 按钮
@@ -322,7 +324,7 @@ ProcessManager 状态 → UI 更新
 
 平台控制器 (ProcessManager 内部调用)
   DispensingPlatformController → MotorManager (轴2+3 home/moveTo/stop)
-  PickupPlatformController     → MotorManager (轴10+11 home/moveTo/stop)
+  PickupPlatformController     → MotorManager (轴13+14 home/moveTo/stop)
   两者均通过 AlarmLogger::raiseAlarm() 上报运动错误
 
 AlarmLogger 状态 → UI 更新

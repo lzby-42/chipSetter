@@ -3,11 +3,11 @@
  * @brief 取晶平台控制器 — XY回零序列 + 双轴点位移动
  *
  * 职责:
- *   - 封装取晶平台 (轴10=X, 轴11=Y) 的自动回零 (X→Y序列)
+ *   - 封装取晶平台 (轴13=X, 轴14=Y) 的自动回零 (X→Y序列)
  *   - 封装双轴并发点位移动 (非插补)
  *   - 错误上报 AlarmLogger
  *
- * 注: W轴(轴12)暂不纳入控制范围
+ * 注: W轴(轴15)暂不纳入控制范围
  *
  * 依赖: MotorManager, AlarmLogger, HardwareConfig.h
  */
@@ -57,8 +57,8 @@ private:
     void reportError(const QString &action, const QString &detail);
 
     // 取晶平台轴
-    static constexpr int AXIS_X = AXIS_PICKUP_X;   // 10
-    static constexpr int AXIS_Y = AXIS_PICKUP_Y;   // 11
+    static constexpr int AXIS_X = AXIS_PICKUP_X;   // 13
+    static constexpr int AXIS_Y = AXIS_PICKUP_Y;   // 14
 
     MotorManager* m_motor;   // 注入, 不拥有
     AlarmLogger*  m_alarm;   // 注入, 不拥有

@@ -1,6 +1,6 @@
 /**
  * @file DeviceStatusWidget.h
- * @brief 设备状态概览 — 13轴灯 + IO关键信号 + 通讯状态
+ * @brief 设备状态概览 — 16轴灯 + IO关键信号 + 通讯状态
  */
 
 #ifndef DEVICESTATUSWIDGET_H
