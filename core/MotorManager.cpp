@@ -203,13 +203,16 @@ void MotorManager::homeRequest(int axisId)
     // mode=20(HOME): 硬件捕获模式 — GTN_SetTriggerPrm + 手动Trap + GetTriggerStatusEx
     if (ax.homeMode == 20 && ax.triggerIndex > 0) {
         // Step 1: 配置Trigger — 把GPI映射为硬件捕获源 (微秒级锁存)
-        TTrigger trig;
+        TTriggerEx trig;
         memset(&trig, 0, sizeof(trig));
-        trig.encoder    = 0;    // 步进电机, 无编码器
-        trig.probeType  = 3;    // CAPTURE_PROBE
-        trig.probeIndex = static_cast<short>(ax.triggerIndex);
-        trig.sense      = static_cast<short>(ax.homeEdge);
-        if (!m_controller->setTrigger(axis, trig)) {
+        trig.latchType     = MC_ENCODER;   // MC_PROFILE — 步进电机锁规划位置
+        trig.latchIndex    = axis; // 本轴
+        trig.probeType     = CAPTURE_PROBE;    // CAPTURE_PROBE
+        trig.probeIndex    = static_cast<short>(ax.triggerIndex);
+        trig.sense         = static_cast<short>(ax.homeEdge);
+        trig.loop          = 1;    // 单次捕获
+        trig.windowOnly    = 0;
+        if (!m_controller->setTriggerEx(axis, trig)) {
             qWarning() << "MotorManager: 轴" << axisId << "Trigger配置失败";
             emit homeFinished(axisId, false, -1);
             return;

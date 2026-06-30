@@ -215,12 +215,27 @@ bool GncController::getHomeStatus(short core, short axis, THomeStatus& sts)
                    GTN_GetHomeStatus(core, axis, &sts)) == 0;
 }
 
-bool GncController::setTrigger(short axis, const TTrigger& trigger)
+bool GncController::setTriggerEx(short axis, const TTriggerEx& trigger)
 {
-    TTrigger t = trigger;
-    short rtn = GTN_SetTrigger(GNC_CORE_NUM, axis, &t);
-    if (gtsCall("GTN_SetTrigger", rtn) != 0) return false;
-    qDebug() << "[Gnc] setTrigger axis=" << axis << " probeIndex=" << trigger.probeIndex
+    // 手册标准流程: 先读当前配置, 修改后写回
+    TTriggerEx t;
+    short rtn = GTN_GetTriggerEx(GNC_CORE_NUM, axis, &t);
+    if (gtsCall("GTN_GetTriggerEx", rtn) != 0) return false;
+
+    t.latchType     = trigger.latchType;
+    t.latchIndex    = trigger.latchIndex;
+    t.probeType     = trigger.probeType;
+    t.probeIndex    = trigger.probeIndex;
+    t.sense         = trigger.sense;
+    t.loop          = trigger.loop;
+    t.offset        = trigger.offset;
+    t.firstPosition = trigger.firstPosition;
+    t.lastPosition  = trigger.lastPosition;
+    t.windowOnly    = trigger.windowOnly;
+
+    rtn = GTN_SetTriggerEx(GNC_CORE_NUM, axis, &t);
+    if (gtsCall("GTN_SetTriggerEx", rtn) != 0) return false;
+    qDebug() << "[Gnc] setTriggerEx axis=" << axis << " probeIndex=" << trigger.probeIndex
              << " sense=" << trigger.sense;
     return true;
 }
