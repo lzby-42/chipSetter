@@ -28,29 +28,31 @@ UI (widgets/) ──Signal/Slot──> Core (core/) ──GncController──> G
                                 └── StatsCollector (产量/时长/节拍)
 ```
 
-### IO 信号映射 (HardwareConfig.h)
+### IO 信号映射 (HardwareConfig.h, 以 CFG 为准)
 
-| GPI | 端口 | 信号名称 | 用途 |
-|-----|------|----------|------|
-| 1 | X0 | 点胶平台X轴正限位 | axis2 limit+ |
-| 2 | X1 | 点胶平台X轴负限位 | axis2 limit- |
-| 3 | X2 | 点胶平台X轴HOME | axis2 home |
-| 4 | X3 | 点胶平台Y轴正限位 | axis3 limit+ |
-| 5 | X4 | 点胶平台Y轴负限位 | axis3 limit- |
-| 6 | X5 | 点胶平台Y轴HOME | axis3 home |
-| 7 | X6 | 取晶X轴正限位 | axis10 limit+ |
-| 8 | X7 | 取晶X轴负限位 | axis10 limit- |
-| 9 | X8 | 取晶X轴HOME | axis10 home |
-| 10 | X9 | 取晶Y轴负限位 | axis11 limit- |
-| 11 | X10 | 取晶Y轴正限位 | axis11 limit+ |
-| 12 | X11 | 取晶臂旋转 | axis4 状态 |
-| 13 | X12 | 点胶臂旋转 | axis5 状态 |
-| 14 | X13 | 取晶平台旋转 | axis12 状态 |
-| 15 | X14 | 吸嘴HOME | axis13 home |
-| 16 | X15 | 顶针1 | axis8 状态 |
-| 17 | X16 | 顶针2 | axis9 状态 |
-| 18 | X17 | 点胶上下气缸到位 | axis6 状态 |
-| 19 | X18 | 取晶臂上下 | axis7 状态 |
+DI_AXIS_MAP 格式: `{gpiNumber, axisId, signalType}` (0=HOME, 1=正限位, 2=负限位)
+
+| GPI | 端口 | 信号名称 | →轴 | 信号类型 |
+|-----|------|----------|-----|----------|
+| 1 | X0 | 点胶平台X轴正限位 | 2 | 正限位 |
+| 2 | X1 | 点胶平台X轴负限位 | 2 | 负限位 |
+| 3 | X2 | 点胶平台X轴HOME | 2 | HOME |
+| 4 | X3 | 点胶平台Y轴正限位 | 3 | 正限位 |
+| 5 | X4 | 点胶平台Y轴负限位 | 3 | 负限位 |
+| 6 | X5 | 点胶平台Y轴HOME | 3 | HOME |
+| 7 | X6 | 取晶X轴正限位 | 7 | 正限位 |
+| 8 | X7 | 取晶X轴负限位 | 7 | 负限位 |
+| 9 | X8 | 取晶X轴HOME | 13 | HOME |
+| 10 | X9 | 取晶Y轴负限位 | 14 | 负限位 |
+| 11 | X10 | 取晶Y轴正限位 | 14 | 正限位 |
+| 12 | X11 | 取晶臂转动 | 7 | 正限位 |
+| 13 | X12 | 点胶臂转动 | 8 | HOME |
+| 14 | X13 | 取晶平台W轴 | 15 | HOME |
+| 15 | X14 | 吸嘴HOME | 16 | HOME |
+| 16 | X15 | 上顶针 | 11 | 正限位 |
+| 17 | X16 | 下顶针 | 12 | 正限位 |
+| 18 | X17 | 点胶臂上下 | 9 | 正限位 |
+| 19 | X18 | 取晶臂上下 | 10 | **负限位** |
 
 | GPO | 端口 | 信号名称 |
 |-----|------|----------|
@@ -105,7 +107,7 @@ cd tests && qmake tests.pro && make -f Makefile.Debug -j4
 | 文件 | 职责 |
 |------|------|
 | `chipSetter.pro` | qmake 工程，固定 GTS SDK 编译 |
-| `core/HardwareConfig.h` | 常量定义：AXIS_COUNT=13, DI_COUNT=19, DO_COUNT=4, DO_INDEX_BASE=9 |
+| `core/HardwareConfig.h` | 常量定义：AXIS_COUNT=16, DI_COUNT=19, DO_COUNT=4, DO_INDEX_BASE=9, DI_AXIS_MAP |
 | `core/GncController.h/.cpp` | **GTS SDK 封装**：GT_Open/GT_GetDi/GT_SetDoBit 等全部硬件操作，SDK 错误追踪 |
 | `core/IoManager.h/.cpp` | IO 管理器：50ms 轮询 DI/DO，变化检测，发出 diChanged/doChanged 信号 |
 | `core/MotorManager.h/.cpp` | 13 轴状态管理，运动控制 |
@@ -114,7 +116,7 @@ cd tests && qmake tests.pro && make -f Makefile.Debug -j4
 | `core/PickupPlatformController.h/.cpp` | 取晶平台（轴10=X, 轴11=Y）：X→Y 回零序列 + 双轴并发点位移动，错误上报 AlarmLogger |
 | `core/AlarmLogger.h/.cpp` | 报警管理器：报警触发/恢复，历史记录，活跃计数，自增 ID |
 | `core/StatsCollector.h/.cpp` | 生产统计：产量、运行时长（小时）、平均节拍（秒/件），1秒定时器更新 |
-| `models/MotorAxis.h` | 轴状态数据模型（位置/速度/限位/状态标志，13个字段） |
+| `models/MotorAxis.h` | 轴数据模型：位置/速度/限位/回零(3模式)/导程/软限位/状态标志 |
 | `models/IoSignal.h` | IO 信号数据模型（ID/类型/名称/值） |
 | `models/AlarmRecord.h` | 报警记录数据模型（ID/时间戳/级别/来源/消息/已解决） |
 | `mainwindow.h/.cpp` | 主窗口：创建全部 8 个 Core 模块、11 个 Widget，信号连线总控 |
@@ -124,6 +126,63 @@ cd tests && qmake tests.pro && make -f Makefile.Debug -j4
 | `scripts/build_debug.bat` | 一键编译（双击运行） |
 | `tests/` | 3 个单元测试 |
 | `.vscode/start_direct.ps1` | 直接启动 chipSetter.exe（无 gdbserver），用于实机测试（区别于 F5 调试） |
+
+## 回零机制
+
+3 种模式，由 `motor_params.json` 中 `homeMode` 控制：
+
+### mode=10 — 限位回零 (GTN_GoHome)
+
+适用：CFG 中配有限位开关的轴。控制器自动完成"往限位搜索→触发→反向退离→停止"。
+
+CFG 中只有单侧限位的轴，`homeDir` 必须指向存在的那一侧：
+
+| 轴 | 仅有的限位 | homeDir |
+|----|-----------|---------|
+| 7  | GPI12 正限位 | 1 |
+| 9  | GPI18 正限位 | 1 |
+| 10 | GPI19 负限位 | -1 |
+| 12 | GPI17 正限位 | 1 |
+| 14 | 双向都有 | 任意 |
+
+`escapeStep`：触发限位后反向退离的 pulse 数。`homeEscapeStep=0` 时自动计算 `qMax(hv*10, 50)`，>0 时直接使用。注意 GPI19=轴10 **负限位**（CFG `limitNegativeIndex=19`，HardwareConfig.h DI_AXIS_MAP signalType=2）。
+
+### mode=20 — IO 回零 (Event-Task 两阶段)
+
+适用：用任意 GPI 做 home 标记点的轴（轴8 GPI13、轴15 GPI14、轴16 GPI15）。
+
+绕过 `GTN_SetTriggerEx` 的硬件模块约束（"Trigger/捕获源/编码器需同模块"→error 7），改用 Event-Task：
+
+```
+Event(WATCH_VAR_GPI + WATCH_CONDITION_UP/DOWN 边沿) → Task(TASK_STOP option=0 急停)
+```
+
+**三阶段：**
+1. **Phase 0 快速搜索**：Jog `homeVelocity×100%` → GPI 边沿 → 硬件急停
+2. **Phase 1 反向退离**：Trap 反向 200 pulse → 离开传感器
+3. **Phase 2 慢速校验**：Jog `homeVelocity×10%` → GPI 边沿 → 急停 → ZeroPos
+
+精度 ≈ 快速模式的 10 倍（慢速急停过冲更小）。
+
+### mode=35 — 当前位置清零
+
+不运动，直接 `GTN_ZeroPos`。适用：轴1 胶盘。
+
+### 轴回零参数 (MotorAxis)
+
+| 字段 | JSON key | 说明 |
+|------|----------|------|
+| `homeMode` | `homeMode` | 10/20/35 |
+| `homeDir` | `homeDir` | 搜索方向 1/-1 |
+| `homeEdge` | `homeEdge` | 触发边沿 0=下降沿 1=上升沿 |
+| `homeVelocity` | `homeVelocity` | 搜索速度 (mm/s 或 pulse/ms) |
+| `homeOffset` | `homeOffset` | 回零偏移 (mm) |
+| `triggerIndex` | `triggerIndex` | mode=20 时 GPI 编号 |
+| `homeEscapeStep` | `homeEscapeStep` | mode=10 退离 pulse (0=自动) |
+
+### applyRequested 保护
+
+`mainwindow.cpp` lambda 在调 `updateAxisParams` 前合并当前轴状态，保护 Widget 不管理的字段（`homeDir/homeEdge/homeMode/triggerIndex/homeEscapeStep/isActive/jogStep`），防止点"应用"时用 MotorAxis 默认值覆盖 JSON 配置。
 
 ## IO 信号流
 
