@@ -265,7 +265,7 @@ void MotorManager::homeRequest(int axisId)
     prm.homeOffset    = static_cast<long>(mmToPulse(axisId, ax.homeOffset));
     prm.searchHomeDistance    = 0;
     prm.searchIndexDistance   = 0;
-    prm.escapeStep    = 1;
+    prm.escapeStep    = static_cast<long>(qMax(hv * 50.0, 200.0));  // 至少200 pulse退离限位
 
     bool ok = m_controller->executeHome(GNC_CORE_NUM, axis, prm);
     if (ok) {
