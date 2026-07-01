@@ -149,6 +149,8 @@ CFG 中只有单侧限位的轴，`homeDir` 必须指向存在的那一侧：
 
 `escapeStep`：触发限位后反向退离的 pulse 数。`homeEscapeStep=0` 时自动计算 `qMax(hv*10, 50)`，>0 时直接使用。注意 GPI19=轴10 **负限位**（CFG `limitNegativeIndex=19`，HardwareConfig.h DI_AXIS_MAP signalType=2）。
 
+**重要**：`GTN_GoHome` 完成后不会自动清零位置寄存器——必须手动调用 `GTN_ZeroPos`。mode=10/20/35 均在轮询检测到回零成功时调用 `m_controller->zeroPosition()`。
+
 ### mode=20 — IO 回零 (Event-Task 两阶段)
 
 适用：用任意 GPI 做 home 标记点的轴（轴8 GPI13、轴15 GPI14、轴16 GPI15）。
