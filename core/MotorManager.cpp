@@ -5,6 +5,7 @@
 
 #include "MotorManager.h"
 #include <QFile>
+#include <QSaveFile>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
@@ -32,6 +33,7 @@ MotorManager::MotorManager(GncController* controller, QObject *parent)
     memset(m_homingJustDone, 0, sizeof(m_homingJustDone));
     memset(m_homeEventId, 0, sizeof(m_homeEventId));
     memset(m_homeTaskId, 0, sizeof(m_homeTaskId));
+    memset(m_homeLinkId, 0, sizeof(m_homeLinkId));
     memset(m_homePhase, 0, sizeof(m_homePhase));
     memset(m_homeFastCapturePos, 0, sizeof(m_homeFastCapturePos));
 
@@ -171,12 +173,19 @@ void MotorManager::stopMove(int axisId)
     // GT_Stop(平滑停止): 带减速曲线, 不下伺服, 不丢失位置
     m_controller->stopMove(GNC_CORE_NUM, static_cast<short>(axisId));
     m_axes[axisId - 1].isMoving = false;
+    m_homingActive[axisId - 1] = false;  // 清除回零标志, 允许后续重新回零
     emit moveFinished(axisId, false);
 }
 
 void MotorManager::homeRequest(int axisId)
 {
     if (axisId < 1 || axisId > AXIS_COUNT) return;
+
+    // 重入保护: 已在回零中的轴忽略重复请求
+    if (m_homingActive[axisId - 1]) {
+        qDebug() << "MotorManager: 轴" << axisId << "已在回零中, 忽略重复请求";
+        return;
+    }
 
     MotorAxis& ax = m_axes[axisId - 1];
     if (!ax.isActive) return;          // 预留轴跳过
@@ -206,17 +215,18 @@ void MotorManager::homeRequest(int axisId)
 
     // mode=20(IO回零): 两阶段 — 快速搜索(GPI边沿→急停) → 反向退离 → 慢速校验(GPI边沿→急停→清零)
     if (ax.homeMode == 20 && ax.triggerIndex > 0) {
-        short eventId, taskId;
+        short eventId, taskId, linkId;
         if (!m_controller->setupIoHomeCapture(GNC_CORE_NUM, axis,
                                                static_cast<short>(ax.triggerIndex),
                                                static_cast<short>(ax.homeEdge),
-                                               eventId, taskId)) {
+                                               eventId, taskId, linkId)) {
             qWarning() << "MotorManager: 轴" << axisId << "Event-Task配置失败";
             emit homeFinished(axisId, false, -1);
             return;
         }
         m_homeEventId[axisId - 1] = eventId;
         m_homeTaskId[axisId - 1]  = taskId;
+        m_homeLinkId[axisId - 1]  = linkId;
         m_homePhase[axisId - 1]   = 0;  // 快速搜索
 
         // Phase 0: 快速Jog — 往搜索方向
@@ -231,7 +241,7 @@ void MotorManager::homeRequest(int axisId)
         jogPrm.dec = 0.1;
         if (!m_controller->startJog(axis, hv, jogPrm)) {
             qWarning() << "MotorManager: 轴" << axisId << "Jog启动失败";
-            m_controller->clearEventTask(GNC_CORE_NUM);
+            m_controller->clearEventTask(GNC_CORE_NUM, m_homeEventId[axisId - 1], m_homeTaskId[axisId - 1], m_homeLinkId[axisId - 1]);
             emit homeFinished(axisId, false, -1);
             return;
         }
@@ -246,8 +256,9 @@ void MotorManager::homeRequest(int axisId)
     }
 
     // mode=10(LIMIT): GTN_GoHome — 使用cfg配置的限位开关
-    THomePrm prm;
-    memset(&prm, 0, sizeof(prm));
+    if (ax.homeMode == 10) {
+        THomePrm prm;
+        memset(&prm, 0, sizeof(prm));
     prm.mode          = 10;   // HOME_MODE_LIMIT
     prm.moveDir       = static_cast<short>(ax.homeDir);
     prm.edge          = static_cast<short>(ax.homeEdge);
@@ -277,6 +288,12 @@ void MotorManager::homeRequest(int axisId)
     } else {
         qWarning() << "MotorManager: 轴" << axisId << "回零命令发送失败";
     }
+        return;
+    }
+
+    // 未识别的回零模式
+    qWarning() << "MotorManager: 轴" << axisId << "未识别的 homeMode=" << ax.homeMode;
+    emit homeFinished(axisId, false, -1);
 }
 
 void MotorManager::jogRequest(int axisId, bool positive, double step, double vel, double acc, double dec)
@@ -407,26 +424,20 @@ QString MotorManager::configFilePath() const
 
 bool MotorManager::atomicWrite(const QString& filePath, const QByteArray& data)
 {
-    QString tmpPath = filePath + ".tmp";
-    // 1. 写入临时文件
-    QFile tmpFile(tmpPath);
-    if (!tmpFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        qWarning() << "MotorManager: 无法写入临时文件" << tmpPath;
+    // QSaveFile: 先写临时文件, commit()时原子rename (NTFS上真正原子)
+    QSaveFile file(filePath);
+    if (!file.open(QIODevice::WriteOnly)) {
+        qWarning() << "MotorManager: 无法打开 QSaveFile" << filePath;
         return false;
     }
-    qint64 written = tmpFile.write(data);
-    tmpFile.close();
+    qint64 written = file.write(data);
     if (written != data.size()) {
-        qWarning() << "MotorManager: 临时文件写入不完整" << written << "/" << data.size();
-        QFile::remove(tmpPath);
+        qWarning() << "MotorManager: 写入不完整" << written << "/" << data.size();
+        file.cancelWriting();
         return false;
     }
-    // 2. 原子替换 (NTFS上rename是原子的)
-    if (QFile::exists(filePath)) {
-        QFile::remove(filePath);
-    }
-    if (!QFile::rename(tmpPath, filePath)) {
-        qWarning() << "MotorManager: rename失败" << tmpPath << "→" << filePath;
+    if (!file.commit()) {
+        qWarning() << "MotorManager: QSaveFile commit 失败" << filePath;
         return false;
     }
     qDebug() << "MotorManager: 参数已保存 →" << filePath;
@@ -470,7 +481,17 @@ bool MotorManager::importFromFile(const QString& filePath)
 
     if (!doc.isObject()) return false;
     QJsonObject root = doc.object();
+
+    // 验证 axes 字段
+    if (!root.contains("axes") || !root["axes"].isArray()) {
+        qWarning() << "MotorManager: 参数文件缺少有效 axes 数组" << filePath;
+        return false;
+    }
     QJsonArray axesArr = root["axes"].toArray();
+    if (axesArr.isEmpty()) {
+        qWarning() << "MotorManager: axes 数组为空" << filePath;
+        return false;
+    }
 
     for (int i = 0; i < axesArr.size() && i < AXIS_COUNT; ++i) {
         MotorAxis ax = m_axes[i];  // 从当前值开始 (保留未序列化的字段)
@@ -544,7 +565,7 @@ void MotorManager::onPollTimer()
                     if (m_controller->getEventStatus(GNC_CORE_NUM, m_homeEventId[axisId - 1], evtSts)
                         && evtSts.eventHit) {
                         // 快速捕获成功 → 记下位置, 清Event, 清状态, 反向退离
-                        m_controller->clearEventTask(GNC_CORE_NUM);
+                        m_controller->clearEventTask(GNC_CORE_NUM, m_homeEventId[axisId - 1], m_homeTaskId[axisId - 1], m_homeLinkId[axisId - 1]);
                         m_controller->getProfilePosition(GNC_CORE_NUM, axisId,
                                                          m_homeFastCapturePos[axisId - 1], clock);
                         m_controller->clearStatus(GNC_CORE_NUM, axisId, 1);
@@ -563,7 +584,7 @@ void MotorManager::onPollTimer()
                                  << " capPos=" << m_homeFastCapturePos[axisId - 1];
                     } else if (!(status & 0x400) && ax.isMoving) {
                         // 快速搜索中意外停止
-                        m_controller->clearEventTask(GNC_CORE_NUM);
+                        m_controller->clearEventTask(GNC_CORE_NUM, m_homeEventId[axisId - 1], m_homeTaskId[axisId - 1], m_homeLinkId[axisId - 1]);
                         ax.isMoving = false;
                         m_homingActive[axisId - 1] = false;
                         m_homingJustDone[axisId - 1] = true;
@@ -578,9 +599,9 @@ void MotorManager::onPollTimer()
                         ax.isMoving = false;
                         short gpiIdx = static_cast<short>(ax.triggerIndex);
                         short edge   = static_cast<short>(ax.homeEdge);
-                        short evtId2, taskId2;
+                        short evtId2, taskId2, linkId2;
                         if (!m_controller->setupIoHomeCapture(GNC_CORE_NUM, axisId,
-                                                               gpiIdx, edge, evtId2, taskId2)) {
+                                                               gpiIdx, edge, evtId2, taskId2, linkId2)) {
                             qWarning() << "MotorManager: 轴" << axisId << "Phase1 Event-Task配置失败";
                             m_homingActive[axisId - 1] = false;
                             m_homingJustDone[axisId - 1] = true;
@@ -589,6 +610,7 @@ void MotorManager::onPollTimer()
                         }
                         m_homeEventId[axisId - 1] = evtId2;
                         m_homeTaskId[axisId - 1]  = taskId2;
+                        m_homeLinkId[axisId - 1]  = linkId2;
 
                         // 慢速Jog: homeVelocity的10%, 精度提高10倍
                         double hv = ax.hasLeadScrew
@@ -604,7 +626,7 @@ void MotorManager::onPollTimer()
                         jogPrm.dec = 0.05;
                         if (!m_controller->startJog(axisId, slowVel, jogPrm)) {
                             qWarning() << "MotorManager: 轴" << axisId << "Phase1 Jog失败";
-                            m_controller->clearEventTask(GNC_CORE_NUM);
+                            m_controller->clearEventTask(GNC_CORE_NUM, m_homeEventId[axisId - 1], m_homeTaskId[axisId - 1], m_homeLinkId[axisId - 1]);
                             m_homingActive[axisId - 1] = false;
                             m_homingJustDone[axisId - 1] = true;
                             emit homeFinished(i + 1, false, -1);
@@ -621,7 +643,7 @@ void MotorManager::onPollTimer()
                     if (m_controller->getEventStatus(GNC_CORE_NUM, m_homeEventId[axisId - 1], evtSts)
                         && evtSts.eventHit) {
                         // 慢速捕获成功 → 清零
-                        m_controller->clearEventTask(GNC_CORE_NUM);
+                        m_controller->clearEventTask(GNC_CORE_NUM, m_homeEventId[axisId - 1], m_homeTaskId[axisId - 1], m_homeLinkId[axisId - 1]);
                         ax.isHomed = true;
                         ax.isMoving = false;
                         m_homingActive[axisId - 1] = false;
@@ -632,7 +654,7 @@ void MotorManager::onPollTimer()
                         emit positionUpdated(i + 1, 0.0);
                         qDebug() << "MotorManager: 轴" << axisId << "Phase2 慢速校验成功→回零完成";
                     } else if (!(status & 0x400) && ax.isMoving) {
-                        m_controller->clearEventTask(GNC_CORE_NUM);
+                        m_controller->clearEventTask(GNC_CORE_NUM, m_homeEventId[axisId - 1], m_homeTaskId[axisId - 1], m_homeLinkId[axisId - 1]);
                         ax.isMoving = false;
                         m_homingActive[axisId - 1] = false;
                         m_homingJustDone[axisId - 1] = true;
@@ -650,6 +672,7 @@ void MotorManager::onPollTimer()
                     m_homingActive[axisId - 1] = false;
                     m_homingJustDone[axisId - 1] = true;
                     ax.currentPosition = 0.0;
+                    m_controller->zeroPosition(GNC_CORE_NUM, axisId);  // 控制器端清零
                     emit homeFinished(i + 1, true, homeSts.stage);
                     emit positionUpdated(i + 1, 0.0);
                     qDebug() << "MotorManager: 轴" << axisId << "回零完成";
