@@ -78,8 +78,9 @@ bool IoManager::setDO(int doIndex, int value)
     if (doIndex < 1 || doIndex > DO_COUNT) return false;
     if (!m_controller || !m_controller->isConnected()) return false;
 
-    short val = static_cast<short>(value);
-    // 逻辑索引1-4 → 物理GPO索引9-12 (Y9-Y12)
+    // 硬件逻辑翻转: 1=关, 0=开 (GPO输出低电平有效)
+    short val = static_cast<short>(value ? 0 : 1);
+    // GTN_WriteDigitalOutputBit 1-indexed: 逻辑1-4 → doIndex 10-13 → Y端子Y9-Y12
     short physIndex = static_cast<short>(doIndex + DO_INDEX_BASE - 1);
     bool ok = m_controller->writeDO(GNC_CORE_NUM, MC_GPO,
                                     physIndex, &val, 1);

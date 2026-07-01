@@ -20,7 +20,10 @@
 #include <QStringList>
 #include <QVariantMap>
 #include <QDateTime>
+#include <QMap>
 
+class IoManager;
+class MotorManager;
 class DispensingPlatformController;
 class PickupPlatformController;
 
@@ -51,6 +54,8 @@ public:
 
     void setDispensingPlatform(DispensingPlatformController* platform);
     void setPickupPlatform(PickupPlatformController* platform);
+    void setIoManager(IoManager* mgr);
+    void setMotorManager(MotorManager* mgr);
 
     // ---- 状态查询 ----
     StepState stepState(int stepIndex) const;
@@ -84,11 +89,46 @@ signals:
     void cycleCompleted(int totalCount);
     void allFinished();
     void realtimeDataUpdated(int stepIndex, const QVariantMap& data);
+    void initError(const QString& reason);
 
 private slots:
     void onStepTimerTick();
+    void onInitMotorHomeFinished(int axisId, bool success, int homeStage);
+    void onInitMotorMoveFinished(int axisId, bool success);
+    void onInitDispensingHomeFinished(bool success);
+    void onInitPickupHomeFinished(bool success);
+    void onInitPhaseTimeout();
 
 private:
+    // --- 初始化流程状态机 ---
+    enum InitPhase {
+        INIT_IDLE = -1,
+        PHASE0_LIGHT = 0,           // 亮黄灯
+        PHASE1_GROUP1 = 1,          // 第一组回零 (轴12+7+平台2,3)
+        PHASE2_GROUP2 = 2,          // 第二组回零 (平台13,14+轴15+8+10)
+        PHASE3_DISPENSE_MOVE = 3,   // 点胶臂旋出5450pulse
+        PHASE4_HOME_AXIS9 = 4,      // 点胶上下回零
+        INIT_COMPLETE = 5
+    };
+
+    void startInitPhase(InitPhase phase);
+    void advanceInitPhase();
+    void abortInit(const QString& reason);
+    void cleanupInitState();
+    void stopAllInitAxes();
+    bool retryFailedAxis(int axisId);
+    void markInitSubstep(int subIdx, StepState state);
+    int  initSubstepForAxis(int axisId) const;
+
+    IoManager*    m_ioManager = nullptr;
+    MotorManager* m_motorManager = nullptr;
+
+    int           m_initPhase = INIT_IDLE;
+    int           m_initPendingMask = 0;
+    bool          m_initAborting = false;  // 防递归abortInit
+    QMap<int,int> m_initRetryCount;
+    QTimer*       m_initPhaseTimer = nullptr;
+
     void initStepDefs();              // 初始化9步定义
     void executeStep(int stepIndex);
     void completeCurrentStep();

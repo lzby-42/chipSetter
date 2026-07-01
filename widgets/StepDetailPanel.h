@@ -34,7 +34,7 @@ public slots:
 
     // Incremental updates
     void updateSubstepState(int stepIndex, int substepIndex, int state);
-    void updateRealtimeData(const QVariantMap& data);
+    void updateRealtimeData(int stepIndex, const QVariantMap& data);
 
 signals:
     // 用户编辑了步骤参数

@@ -6,6 +6,9 @@
 #include "ProcessManager.h"
 #include "core/DispensingPlatformController.h"
 #include "core/PickupPlatformController.h"
+#include "core/IoManager.h"
+#include "core/MotorManager.h"
+#include "core/HardwareConfig.h"
 #include <QDebug>
 
 // ============================================================
@@ -52,22 +55,54 @@ ProcessManager::ProcessManager(QObject *parent)
     // 模拟定时器: 每500ms完成一个子步骤
     m_stepTimer = new QTimer(this);
     connect(m_stepTimer, &QTimer::timeout, this, &ProcessManager::onStepTimerTick);
+
+    // 初始化超时定时器 (单次触发, 每相位不同超时值)
+    m_initPhaseTimer = new QTimer(this);
+    m_initPhaseTimer->setSingleShot(true);
+    connect(m_initPhaseTimer, &QTimer::timeout,
+            this, &ProcessManager::onInitPhaseTimeout);
 }
 
 ProcessManager::~ProcessManager()
 {
     if (m_stepTimer->isActive())
         m_stepTimer->stop();
+    if (m_initPhaseTimer->isActive())
+        m_initPhaseTimer->stop();
 }
 
 void ProcessManager::setDispensingPlatform(DispensingPlatformController* platform)
 {
     m_dispensingPlatform = platform;
+    if (m_dispensingPlatform) {
+        connect(m_dispensingPlatform, &DispensingPlatformController::homeFinished,
+                this, &ProcessManager::onInitDispensingHomeFinished);
+    }
 }
 
 void ProcessManager::setPickupPlatform(PickupPlatformController* platform)
 {
     m_pickupPlatform = platform;
+    if (m_pickupPlatform) {
+        connect(m_pickupPlatform, &PickupPlatformController::homeFinished,
+                this, &ProcessManager::onInitPickupHomeFinished);
+    }
+}
+
+void ProcessManager::setIoManager(IoManager* mgr)
+{
+    m_ioManager = mgr;
+}
+
+void ProcessManager::setMotorManager(MotorManager* mgr)
+{
+    m_motorManager = mgr;
+    if (m_motorManager) {
+        connect(m_motorManager, &MotorManager::homeFinished,
+                this, &ProcessManager::onInitMotorHomeFinished);
+        connect(m_motorManager, &MotorManager::moveFinished,
+                this, &ProcessManager::onInitMotorMoveFinished);
+    }
 }
 
 // ============================================================
@@ -79,8 +114,17 @@ void ProcessManager::initStepDefs()
     m_steps.resize(STEP_COUNT);
 
     m_steps[0] = {0, "初始化", {
-        "13轴使能与归零", "IO通道检测", "加载运动参数",
-        "气压检测", "通讯链路确认"
+        "亮黄灯",
+        "胶盘回零",
+        "下顶针回零",
+        "取晶臂转动回零",
+        "点胶平台回零",
+        "取晶平台XY回零",
+        "取晶平台W回零",
+        "点胶臂转动回零",
+        "取晶臂上下回零",
+        "点胶臂旋出5450pulse",
+        "点胶上下回零"
     }, {}};
 
     m_steps[1] = {1, "上料", {
@@ -235,6 +279,11 @@ void ProcessManager::startCycle()
         m_cycleCount = 0;
         m_pendingFinish = false;
         executeStep(STEP_INIT);
+    } else if (m_currentStepIdx == STEP_INIT && m_initPhase != INIT_IDLE
+               && m_initPhase != INIT_COMPLETE) {
+        // INIT 正在执行中 (硬件事件驱动), 不重新开始
+        qDebug() << "[ProcessManager] INIT 已在进行中, 忽略 startCycle";
+        return;
     } else {
         // 继续执行当前步骤
         executeStep(m_currentStepIdx);
@@ -255,9 +304,11 @@ void ProcessManager::resumeCycle()
     if (!m_running) return;
     m_paused = false;
     if (m_currentStepIdx >= 0) {
-        m_stepTimer->start(500);
+        // INIT 是事件驱动, 不启动模拟定时器
+        if (m_currentStepIdx != STEP_INIT) {
+            m_stepTimer->start(500);
+        }
     } else {
-        // Was paused at loop boundary — restart from loop start
         executeStep(LOOP_START);
     }
     qDebug() << "[ProcessManager] 继续循环";
@@ -265,6 +316,10 @@ void ProcessManager::resumeCycle()
 
 void ProcessManager::finishCycle()
 {
+    if (!m_running) {
+        qDebug() << "[ProcessManager] 系统空闲中, 忽略 finishCycle";
+        return;
+    }
     m_paused = false;
     m_pendingFinish = false;
     // 跳过当前步骤, 直接进入收尾
@@ -289,9 +344,26 @@ void ProcessManager::emergencyStop()
     m_paused  = false;
     m_stepTimer->stop();
 
+    // 清理初始化流程
+    stopAllInitAxes();
+    if (m_dispensingPlatform) m_dispensingPlatform->stop();
+    if (m_pickupPlatform)     m_pickupPlatform->stop();
+    cleanupInitState();
+    m_initRetryCount.clear();
+
+    // 急停 → 红灯亮
+    if (m_ioManager) {
+        m_ioManager->setDO(DO_YELLOW_LIGHT, 0);
+        m_ioManager->setDO(DO_GREEN_LIGHT, 0);
+        m_ioManager->setDO(DO_RED_LIGHT, 1);
+    }
+
     // 全部重置
     for (int i = 0; i < STEP_COUNT; ++i) {
         m_stepStates[i] = PENDING;
+        for (int j = 0; j < m_substepStates[i].size(); ++j) {
+            m_substepStates[i][j] = PENDING;
+        }
         emit stepStateChanged(i, static_cast<int>(PENDING));
     }
 
@@ -331,6 +403,16 @@ void ProcessManager::executeStep(int stepIndex)
         emit substepStateChanged(stepIndex, 0, static_cast<int>(RUNNING));
     }
 
+    // STEP_INIT: 事件驱动, 不启动模拟定时器
+    if (stepIndex == STEP_INIT) {
+        m_stepTimer->stop();
+        cleanupInitState();
+        m_initRetryCount.clear();
+        startInitPhase(PHASE0_LIGHT);
+        return;
+    }
+
+    // 其余步骤保持定时器模拟
     m_stepTimer->start(500);
 
     qDebug() << "[ProcessManager] 执行步骤" << stepIndex
@@ -455,4 +537,308 @@ void ProcessManager::advanceToNextStep()
     }
 
     executeStep(nextIdx);
+}
+
+// ============================================================
+// 初始化流程 — 事件驱动状态机
+// ============================================================
+
+void ProcessManager::startInitPhase(InitPhase phase)
+{
+    m_initPhase = phase;
+    m_initPendingMask = 0;
+    m_initPhaseTimer->stop();
+
+    switch (phase) {
+
+    case PHASE0_LIGHT:
+        markInitSubstep(0, RUNNING);  // 亮黄灯
+        if (m_ioManager) {
+            // 先关掉所有灯, 再亮黄灯 (避免CFG默认值导致多灯同时亮)
+            for (int d = 1; d <= DO_COUNT; ++d)
+                m_ioManager->setDO(d, 0);
+            m_ioManager->setDO(DO_YELLOW_LIGHT, 1);
+        }
+        qDebug() << "[ProcessManager] INIT Phase0: 黄灯亮";
+        advanceInitPhase();
+        break;
+
+    case PHASE1_GROUP1: {
+        // 轴1 mode=35 同步零位
+        if (m_motorManager)
+            m_motorManager->homeRequest(AXIS_JIAO_PAN);
+
+        // 并发子步骤: 1(胶盘同步→立即COMPLETED) + 2(下顶针) + 3(取晶臂) + 4(点胶平台)
+        markInitSubstep(1, COMPLETED);  // 胶盘 mode=35 同步完成
+        markInitSubstep(2, RUNNING);     // 下顶针
+        markInitSubstep(3, RUNNING);     // 取晶臂转动
+        markInitSubstep(4, RUNNING);     // 点胶平台
+
+        m_initPendingMask = (1 << 12) | (1 << 7) | (1 << 0);
+        m_initPhaseTimer->start(HOME_TIMEOUT_MS);
+        qDebug() << "[ProcessManager] INIT Phase1: 第一组并发回零";
+
+        if (m_motorManager) {
+            m_motorManager->homeRequest(AXIS_EJECTOR_DOWN);
+            m_motorManager->homeRequest(AXIS_PICKUP_ARM_ROT);
+        }
+        if (m_dispensingPlatform)
+            m_dispensingPlatform->home();
+        break;
+    }
+
+    case PHASE2_GROUP2:
+        // 并发子步骤: 5(取晶XY) + 6(取晶W) + 7(点胶臂转动) + 8(取晶上下)
+        markInitSubstep(5, RUNNING);
+        markInitSubstep(6, RUNNING);
+        markInitSubstep(7, RUNNING);
+        markInitSubstep(8, RUNNING);
+
+        m_initPendingMask = (1 << 15) | (1 << 8) | (1 << 10) | (1 << 1);
+        m_initPhaseTimer->start(HOME_TIMEOUT_MS);
+        qDebug() << "[ProcessManager] INIT Phase2: 第二组并发回零";
+
+        if (m_motorManager) {
+            m_motorManager->homeRequest(AXIS_PICKUP_W);
+            m_motorManager->homeRequest(AXIS_DISPENSE_ARM_ROT);
+            m_motorManager->homeRequest(AXIS_PICKUP_ARM_UD);
+        }
+        if (m_pickupPlatform)
+            m_pickupPlatform->home();
+        break;
+
+    case PHASE3_DISPENSE_MOVE:
+        markInitSubstep(9, RUNNING);  // 点胶臂旋出
+
+        m_initPendingMask = (1 << 8);
+        m_initPhaseTimer->start(MOVE_TIMEOUT_MS);
+        qDebug() << "[ProcessManager] INIT Phase3: 点胶臂旋出5450pulse";
+
+        if (m_motorManager) {
+            const MotorAxis& ax8 = m_motorManager->axisState(AXIS_DISPENSE_ARM_ROT);
+            m_motorManager->moveRequest(AXIS_DISPENSE_ARM_ROT, 5450.0,
+                                        ax8.velocity, ax8.acceleration, ax8.deceleration);
+        }
+        break;
+
+    case PHASE4_HOME_AXIS9:
+        markInitSubstep(10, RUNNING);  // 点胶上下回零
+
+        m_initPendingMask = (1 << 9);
+        m_initPhaseTimer->start(HOME_TIMEOUT_MS);
+        qDebug() << "[ProcessManager] INIT Phase4: 点胶上下回零";
+
+        if (m_motorManager)
+            m_motorManager->homeRequest(AXIS_DISPENSE_ARM_UD);
+        break;
+
+    default:
+        break;
+    }
+}
+
+void ProcessManager::advanceInitPhase()
+{
+    // 将当前相位中所有还在 RUNNING 的子步骤标记为 COMPLETED
+    for (int s = 0; s < m_substepStates[STEP_INIT].size(); ++s) {
+        if (m_substepStates[STEP_INIT][s] == RUNNING)
+            markInitSubstep(s, COMPLETED);
+    }
+
+    InitPhase next = static_cast<InitPhase>(m_initPhase + 1);
+    if (next > PHASE4_HOME_AXIS9) {
+        m_initPhase = INIT_COMPLETE;
+        qDebug() << "[ProcessManager] INIT 全部完成";
+        cleanupInitState();
+        completeCurrentStep();
+    } else {
+        startInitPhase(next);
+    }
+}
+
+void ProcessManager::abortInit(const QString& reason)
+{
+    if (m_initAborting) return;  // 防递归 (急停时stopAllInitAxes可能触发二次abort)
+    m_initAborting = true;
+
+    qWarning() << "[ProcessManager] INIT 失败:" << reason;
+
+    m_initPhaseTimer->stop();
+    m_initPendingMask = 0;
+    m_initRetryCount.clear();
+
+    stopAllInitAxes();
+    if (m_dispensingPlatform) m_dispensingPlatform->stop();
+    if (m_pickupPlatform)     m_pickupPlatform->stop();
+
+    if (m_ioManager) {
+        m_ioManager->setDO(DO_YELLOW_LIGHT, 0);
+        m_ioManager->setDO(DO_GREEN_LIGHT, 0);
+        m_ioManager->setDO(DO_RED_LIGHT, 1);
+    }
+
+    // 标记所有 RUNNING 子步骤为 FAILED
+    for (int s = 0; s < m_substepStates[STEP_INIT].size(); ++s) {
+        if (m_substepStates[STEP_INIT][s] == RUNNING) {
+            m_substepStates[STEP_INIT][s] = FAILED;
+            emit substepStateChanged(STEP_INIT, s, static_cast<int>(FAILED));
+        }
+    }
+
+    m_stepStates[STEP_INIT] = FAILED;
+    emit stepStateChanged(STEP_INIT, static_cast<int>(FAILED));
+
+    m_running = false;
+    m_currentStepIdx = -1;
+    emit currentStepChanged(-1);
+
+    emit initError(reason);
+}
+
+void ProcessManager::onInitMotorHomeFinished(int axisId, bool success, int homeStage)
+{
+    Q_UNUSED(homeStage);
+    if (m_currentStepIdx != STEP_INIT) return;
+    if (m_initPendingMask == 0) return;
+
+    int bit = (1 << axisId);
+    if (!(m_initPendingMask & bit)) return;
+
+    m_initPendingMask &= ~bit;
+
+    if (!success) {
+        if (retryFailedAxis(axisId))
+            return;
+        abortInit(QString("轴%1回零失败(已重试)").arg(axisId));
+        return;
+    }
+
+    // 标记对应子步骤完成
+    int sub = initSubstepForAxis(axisId);
+    if (sub >= 0) markInitSubstep(sub, COMPLETED);
+
+    qDebug() << "[ProcessManager] INIT 轴" << axisId << "回零完成";
+
+    if (m_initPendingMask == 0)
+        advanceInitPhase();
+}
+
+void ProcessManager::onInitDispensingHomeFinished(bool success)
+{
+    if (m_currentStepIdx != STEP_INIT) return;
+    if (m_initPhase != PHASE1_GROUP1) return;
+    if (!(m_initPendingMask & (1 << 0))) return;
+
+    m_initPendingMask &= ~(1 << 0);
+
+    if (!success) {
+        abortInit("点胶平台回零失败");
+        return;
+    }
+
+    markInitSubstep(4, COMPLETED);  // 点胶平台回零
+    qDebug() << "[ProcessManager] INIT 点胶平台回零完成";
+    if (m_initPendingMask == 0)
+        advanceInitPhase();
+}
+
+void ProcessManager::onInitPickupHomeFinished(bool success)
+{
+    if (m_currentStepIdx != STEP_INIT) return;
+    if (m_initPhase != PHASE2_GROUP2) return;
+    if (!(m_initPendingMask & (1 << 1))) return;
+
+    m_initPendingMask &= ~(1 << 1);
+
+    if (!success) {
+        abortInit("取晶平台回零失败");
+        return;
+    }
+
+    markInitSubstep(5, COMPLETED);  // 取晶平台XY回零
+    qDebug() << "[ProcessManager] INIT 取晶平台回零完成";
+    if (m_initPendingMask == 0)
+        advanceInitPhase();
+}
+
+void ProcessManager::onInitMotorMoveFinished(int axisId, bool success)
+{
+    if (m_currentStepIdx != STEP_INIT) return;
+    if (m_initPhase != PHASE3_DISPENSE_MOVE) return;
+
+    int bit = (1 << axisId);
+    if (!(m_initPendingMask & bit)) return;
+
+    m_initPendingMask &= ~bit;
+
+    if (!success) {
+        abortInit(QString("点胶臂旋出失败, 轴%1").arg(axisId));
+        return;
+    }
+
+    markInitSubstep(9, COMPLETED);  // 点胶臂旋出
+    qDebug() << "[ProcessManager] INIT 点胶臂旋出完成";
+    if (m_initPendingMask == 0)
+        advanceInitPhase();
+}
+
+void ProcessManager::onInitPhaseTimeout()
+{
+    if (m_initPhase < PHASE0_LIGHT || m_initPhase > PHASE4_HOME_AXIS9) return;
+    if (m_initPendingMask == 0) return;
+
+    abortInit(QString("初始化Phase%1超时").arg(m_initPhase));
+}
+
+void ProcessManager::cleanupInitState()
+{
+    m_initPhase = INIT_IDLE;
+    m_initPendingMask = 0;
+    m_initAborting = false;
+    m_initPhaseTimer->stop();
+}
+
+void ProcessManager::stopAllInitAxes()
+{
+    if (!m_motorManager) return;
+    int axes[] = {1, 2, 3, 7, 8, 9, 10, 12, 13, 14, 15};
+    for (int id : axes)
+        m_motorManager->stopMove(id);
+}
+
+bool ProcessManager::retryFailedAxis(int axisId)
+{
+    int count = m_initRetryCount.value(axisId, 0);
+    if (count >= 1) return false;
+
+    m_initRetryCount[axisId] = count + 1;
+    m_initPendingMask |= (1 << axisId);
+    m_initPhaseTimer->start(HOME_TIMEOUT_MS);  // 重试时重启超时
+    qWarning() << "[ProcessManager] INIT 轴" << axisId
+               << "回零失败, 重试第" << (count + 1) << "次";
+    if (m_motorManager)
+        m_motorManager->homeRequest(axisId);
+    return true;
+}
+
+void ProcessManager::markInitSubstep(int subIdx, StepState state)
+{
+    if (subIdx < 0 || subIdx >= m_substepStates[STEP_INIT].size()) return;
+    m_substepStates[STEP_INIT][subIdx] = state;
+    emit substepStateChanged(STEP_INIT, subIdx, static_cast<int>(state));
+}
+
+int ProcessManager::initSubstepForAxis(int axisId) const
+{
+    // 轴ID → 初始化子步骤索引映射
+    switch (axisId) {
+    case AXIS_JIAO_PAN:        return 1;   // 胶盘
+    case AXIS_EJECTOR_DOWN:    return 2;   // 下顶针
+    case AXIS_PICKUP_ARM_ROT:  return 3;   // 取晶臂转动
+    case AXIS_PICKUP_W:        return 6;   // 取晶平台W
+    case AXIS_DISPENSE_ARM_ROT:return 7;   // 点胶臂转动
+    case AXIS_PICKUP_ARM_UD:   return 8;   // 取晶臂上下
+    case AXIS_DISPENSE_ARM_UD: return 10;  // 点胶上下
+    default:                   return -1;
+    }
 }

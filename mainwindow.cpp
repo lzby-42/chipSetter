@@ -242,13 +242,44 @@ void MainWindow::connectSignals()
     // ProcessManager realtime data → StepDetailPanel
     connect(m_processManager, &ProcessManager::realtimeDataUpdated,
             this, [this](int stepIndex, const QVariantMap& data) {
-        m_production->stepDetailPanel()->updateRealtimeData(data);
-        Q_UNUSED(stepIndex);
+        m_production->stepDetailPanel()->updateRealtimeData(stepIndex, data);
     });
 
     // ProcessManager cycle completed → StatsCollector (使用权威值, 不自行累加)
     connect(m_processManager, &ProcessManager::cycleCompleted,
             m_statsCollector, &StatsCollector::setCount);
+
+    // ProcessManager all finished → 重置UI状态
+    connect(m_processManager, &ProcessManager::allFinished,
+            this, [this]() {
+        m_statusBar->setRunStatus(false);
+        m_production->setRunStatus(false);
+        m_statsCollector->pause();
+    });
+
+    // INIT 初始化错误 → 报警
+    connect(m_processManager, &ProcessManager::initError,
+            this, [this](const QString& reason) {
+        m_alarmLogger->raiseAlarm(ALARM_LEVEL_FATAL, "初始化", reason);
+    });
+
+    // 步骤0(初始化)完成/失败 → 灯色切换
+    connect(m_processManager, &ProcessManager::stepStateChanged,
+            this, [this](int stepIndex, int state) {
+        if (stepIndex != 0) return;
+        qDebug() << "[MainWindow] stepStateChanged step=0 state=" << state;
+        if (state == static_cast<int>(ProcessManager::COMPLETED)) {
+            qDebug() << "[MainWindow] INIT完成 → 绿灯亮";
+            m_ioManager->setDO(DO_YELLOW_LIGHT, 0);
+            m_ioManager->setDO(DO_RED_LIGHT, 0);
+            m_ioManager->setDO(DO_GREEN_LIGHT, 1);
+        } else if (state == static_cast<int>(ProcessManager::FAILED)) {
+            qDebug() << "[MainWindow] INIT失败 → 红灯亮";
+            m_ioManager->setDO(DO_YELLOW_LIGHT, 0);
+            m_ioManager->setDO(DO_GREEN_LIGHT, 0);
+            m_ioManager->setDO(DO_RED_LIGHT, 1);
+        }
+    });
 
     // ===== 电机 (调试界面) =====
     connect(m_motorControl, &MotorControlWidget::moveRequested,
@@ -324,6 +355,10 @@ void MainWindow::connectSignals()
             m_ioMonitor, &IoMonitorWidget::onDiChanged);
     connect(m_ioManager, &IoManager::doChanged,
             m_ioMonitor, &IoMonitorWidget::onDoChanged);
+
+    // DO测试按钮 → IoManager
+    connect(m_ioMonitor, &IoMonitorWidget::doToggleRequested,
+            m_ioManager, &IoManager::setDO);
 
     // DI → 轴限位映射
     connect(m_ioManager, &IoManager::diChanged,
@@ -504,12 +539,16 @@ void MainWindow::initSystem()
     m_production->setConnectionStatus(m_gncController->isConnected());
 
     m_motorManager->initialize();
-    m_motorManager->loadLimitsFromController(); // 先从控制器读cfg基线值
+    if (cardOk) {
+        m_motorManager->loadLimitsFromController(); // 先从控制器读cfg基线值
+    }
     m_motorManager->autoLoad();          // JSON用户参数覆盖 (优先级高于cfg)
     m_dispensingPlatform->initialize();
     m_pickupPlatform->initialize();
     m_processManager->setDispensingPlatform(m_dispensingPlatform);
     m_processManager->setPickupPlatform(m_pickupPlatform);
+    m_processManager->setIoManager(m_ioManager);
+    m_processManager->setMotorManager(m_motorManager);
     m_ioManager->initialize();
 
     m_statusBar->setMode(m_currentMode);

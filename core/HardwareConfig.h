@@ -35,8 +35,8 @@
 
 // ---- IO数量 (匹配实际机器) ----
 #define DI_COUNT            19   // X0-X18, 对应 GTS GPI 1-19
-#define DO_COUNT             4   // Y9-Y12, 对应 GTS GPO 9-12
-#define DO_INDEX_BASE        9   // DO在GTS中的起始编号 (GPO9=Y9)
+#define DO_COUNT             4   // Y9-Y12, 对应 GTS GPO 10-13
+#define DO_INDEX_BASE       10   // GTN_WriteDigitalOutputBit: doIdx10→Y9, 11→Y10, 12→Y11, 13→Y12
 
 // ---- DI信号ID定义 (对应 GTS GPI 1-19) ----
 #define DI_DISPENSE_X_LIMIT_P    1   // GPI1  X0 点胶平台X轴正限位
@@ -72,10 +72,10 @@
 }
 
 // ---- DO信号ID定义 ----
-#define DO_RED_LIGHT        1   // GPO9  Y9  红灯
-#define DO_YELLOW_LIGHT     2   // GPO10 Y10 黄灯
-#define DO_GREEN_LIGHT      3   // GPO11 Y11 绿灯
-#define DO_BUZZER           4   // GPO12 Y12 蜂鸣器
+#define DO_RED_LIGHT        1   // doIndex 10 → Y9  红灯
+#define DO_YELLOW_LIGHT     2   // doIndex 11 → Y10 黄灯
+#define DO_GREEN_LIGHT      3   // doIndex 12 → Y11 绿灯
+#define DO_BUZZER           4   // doIndex 13 → Y12 蜂鸣器
 
 #define DO_NAMES { "红灯", "黄灯", "绿灯", "蜂鸣器" }
 
@@ -124,5 +124,9 @@ struct DiToAxisMapping {
     {18,  9, 1 },  /* GPI18 X17 点胶臂上下     → 轴9  正限位 */ \
     {19, 10, 2 },  /* GPI19 X18 取晶臂上下     → 轴10 负限位 */ \
 }
+
+// ---- 超时保护 ----
+#define HOME_TIMEOUT_MS      60000   // 回零超时 (60秒)
+#define MOVE_TIMEOUT_MS      30000   // 点位移动超时 (30秒)
 
 #endif // HARDWARECONFIG_H

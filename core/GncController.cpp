@@ -6,7 +6,7 @@
  *   GTN_OpenCard(CHANNEL_RINGNET)  — 打开环网控制器 (GNC-C610)
  *   GTN_LoadConfig(core, cfgFile)   — 加载MotionStudio生成的配置
  *   GTN_GetDi(core, MC_GPI, &bits)  — 读取GPI的32位掩码
- *   GTN_SetDoBit(core, MC_GPO, idx, val) — 设置单个GPO
+ *   GTN_WriteDigitalOutputBit(core, &doBit, NULL) — 设置DO输出 (doIndex 10-13 → Y9-Y12)
  *   GTN_GetSts(core, axis, &sts)    — 读取轴状态
  */
 #include "GncController.h"
@@ -290,22 +290,19 @@ bool GncController::startJog(short axis, double vel, const TJogPrm& prm)
 // Event-Task — IO回零 (GPIO边沿 → 硬件急停)
 // ============================================================
 
-bool GncController::clearEventTask(short core)
+bool GncController::clearEventTask(short core, short eventId, short taskId, short linkId)
 {
-    GTN_ClearEvent(core);
-    GTN_ClearTask(core);
-    GTN_ClearEventTaskLink(core);
+    // 按ID删除, 不影响其他轴的Event-Task (支持并发IO回零)
+    GTN_DeleteEventTaskLink(core, linkId);
+    GTN_DeleteEvent(core, eventId);
+    GTN_DeleteTask(core, taskId);
     return true;
 }
 
 bool GncController::setupIoHomeCapture(short core, short axis, short gpiIndex,
-                                        short homeEdge, short& outEventId, short& outTaskId)
+                                        short homeEdge, short& outEventId, short& outTaskId,
+                                        short& outLinkId)
 {
-    // 清除旧事件/任务/链接
-    GTN_ClearEvent(core);
-    GTN_ClearTask(core);
-    GTN_ClearEventTaskLink(core);
-
     // 事件: GPI边沿触发 (UP=上升沿, DOWN=下降沿, 避免电平误触发)
     TEvent event;
     memset(&event, 0, sizeof(event));
@@ -335,8 +332,7 @@ bool GncController::setupIoHomeCapture(short core, short axis, short gpiIndex,
     }
 
     // 链接
-    short linkId;
-    rtn = GTN_AddEventTaskLink(core, outEventId, outTaskId, &linkId);
+    rtn = GTN_AddEventTaskLink(core, outEventId, outTaskId, &outLinkId);
     if (gtsCall("GTN_AddEventTaskLink", rtn) != 0) {
         qDebug() << "[Gnc] setupIoHome: AddEventTaskLink failed";
         return false;
@@ -440,8 +436,18 @@ bool GncController::writeDO(short core, short doType, short doIndex, short* valu
 {
     bool allOk = true;
     for (short i = 0; i < count; ++i) {
-        short rtn = GTN_SetDoBit(core, doType, doIndex + i, values[i]);
-        if (gtsCall("GTN_SetDoBit", rtn) != 0) allOk = false;
+        TDigitalOutputBit doBit;
+        memset(&doBit, 0, sizeof(doBit));
+        doBit.mode    = 0;          // 0=立即输出
+        doBit.doType  = doType;     
+        doBit.doIndex = doIndex + i;
+        doBit.doValue = values[i];
+
+        qDebug() << "[Gnc] GTN_WriteDigitalOutputBit core=" << core
+                 << "doType=" << doBit.doType << "doIndex=" << doBit.doIndex
+                 << "doValue=" << doBit.doValue;
+        short rtn = GTN_WriteDigitalOutputBit(core, &doBit, NULL);
+        if (gtsCall("GTN_WriteDigitalOutputBit", rtn) != 0) allOk = false;
     }
     return allOk;
 }

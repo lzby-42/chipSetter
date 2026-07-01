@@ -211,8 +211,10 @@ void StepDetailPanel::updateSubstepState(int stepIndex, int substepIndex, int st
         QString("color:%1; font-size:9px; border:none;").arg(stateColors[state]));
 }
 
-void StepDetailPanel::updateRealtimeData(const QVariantMap& data)
+void StepDetailPanel::updateRealtimeData(int stepIndex, const QVariantMap& data)
 {
+    if (stepIndex != m_currentStepIndex) return;  // 只更新当前显示的步骤
+
     QStringList keys = data.keys();
     for (int i = 0; i < keys.size() && i < m_realtimeLabels.size(); ++i) {
         if (m_realtimeLabels[i].first->text() == keys[i]) {

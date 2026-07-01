@@ -86,9 +86,9 @@ public:
     bool startJog(short axis, double vel, const TJogPrm& prm);      // Jog持续运动
 
     // ---- Event-Task IO回零 (绕过Trigger模块约束) ----
-    bool clearEventTask(short core);
+    bool clearEventTask(short core, short eventId, short taskId, short linkId);
     bool setupIoHomeCapture(short core, short axis, short gpiIndex, short homeEdge,
-                            short& outEventId, short& outTaskId);
+                            short& outEventId, short& outTaskId, short& outLinkId);
     bool enableEvent(short core, short eventId, short count = 1);
     bool disableEvent(short core, short eventId, short count = 1);
     bool getEventStatus(short core, short eventId, TEventStatus& sts);

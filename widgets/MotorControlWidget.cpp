@@ -284,11 +284,12 @@ void MotorControlWidget::onAxisButtonClicked(int axisId)
 {
     if (m_selectedAxisId != axisId && m_motor) {
         const MotorAxis& cur = m_motor->axisState(m_selectedAxisId);
-        if (m_softLimitPosSpin->value() != cur.softLimitPositive ||
-            m_softLimitNegSpin->value() != cur.softLimitNegative ||
-            m_velocitySpin->value() != cur.velocity ||
-            m_accelSpin->value() != cur.acceleration ||
-            m_decelSpin->value() != cur.deceleration) {
+        static const double EPS = 1e-6;
+        if (qAbs(m_softLimitPosSpin->value() - cur.softLimitPositive) > EPS ||
+            qAbs(m_softLimitNegSpin->value() - cur.softLimitNegative) > EPS ||
+            qAbs(m_velocitySpin->value() - cur.velocity) > EPS ||
+            qAbs(m_accelSpin->value() - cur.acceleration) > EPS ||
+            qAbs(m_decelSpin->value() - cur.deceleration) > EPS) {
             onApplyClicked();
         }
     }

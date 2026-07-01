@@ -14,6 +14,7 @@
 #include <QWidget>
 #include <QLabel>
 #include <QVector>
+#include <QEvent>
 #include "models/IoSignal.h"
 #include "core/HardwareConfig.h"
 
@@ -30,11 +31,18 @@ public slots:
     void onDoChanged(int id, int value);
     void refreshAll(const QVector<IoSignal>& diSignals, const QVector<IoSignal>& doSignals);
 
+signals:
+    void doToggleRequested(int doId, int value);  // DO开关请求 → IoManager::setDO
+
+protected:
+    bool eventFilter(QObject* obj, QEvent* event) override;  // 拦截DO标签点击
+
 private:
     void setupUI();
 
-    QVector<QLabel*> m_diLabels;    // 19个DI状态标签
-    QVector<QLabel*> m_doLabels;    // 4个DO状态标签
+    QVector<QLabel*> m_diLabels;     // 19个DI状态标签
+    QVector<QLabel*> m_doLabels;     // 4个DO状态标签 (可点击切换)
+    short            m_doValues[5];  // DO当前值 (1-based)
 
     void updateLabelStyle(QLabel* label, IoType type, int value);
 };

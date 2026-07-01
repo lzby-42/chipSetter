@@ -76,7 +76,8 @@ void TestProcessManager::testLoopBehavior()
 
     // Wait for init + at least one full loop cycle
     // Each step has ~2-5 substeps × 500ms, 7 loop steps ≈ ~12-15s total
-    QTest::qWait(18000);
+    // 25000ms 提供 ~70% 余量，避免 CI/高负载系统假失败
+    QTest::qWait(25000);
 
     // Should have completed at least 1 cycle
     QVERIFY(pm.cycleCount() >= 1);

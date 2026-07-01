@@ -14,6 +14,7 @@
 #define DISPENSINGPLATFORMCONTROLLER_H
 
 #include <QObject>
+#include <QTimer>
 #include "core/HardwareConfig.h"
 
 class MotorManager;
@@ -50,6 +51,8 @@ private slots:
     void onMotorHomeFinished(int axisId, bool success, int homeStage);
     void onMotorMoveFinished(int axisId, bool success);
     void onMotorPositionUpdated(int axisId, double position);
+    void onHomeTimeout();
+    void onMoveTimeout();
 
 private:
     void reportError(const QString &action, const QString &detail);
@@ -64,8 +67,11 @@ private:
     enum HomeState { IDLE, HOMING_X, HOMING_Y, DONE };
     HomeState m_homeState = IDLE;
 
-    int  m_pendingMoves = 0;   // 当前 moveTo 等待完成的轴数
+    int  m_pendingMask = 0;    // bit0=AXIS_X, bit1=AXIS_Y (位掩码防重复信号)
     bool m_moveFailed = false; // 当前 moveTo 是否有轴失败
+
+    QTimer* m_homeTimer = nullptr;  // 回零超时 (单次)
+    QTimer* m_moveTimer = nullptr;  // 移动超时 (单次)
 
     double m_currentX = 0.0;
     double m_currentY = 0.0;

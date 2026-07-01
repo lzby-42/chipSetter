@@ -13,6 +13,7 @@
 IoMonitorWidget::IoMonitorWidget(QWidget *parent)
     : QWidget(parent)
 {
+    memset(m_doValues, 0, sizeof(m_doValues));
     setupUI();
 }
 
@@ -54,7 +55,7 @@ void IoMonitorWidget::setupUI()
     mainLayout->addLayout(diGrid);
 
     // ---- DO区域 ----
-    QLabel* doTitle = new QLabel("输出 DO", this);
+    QLabel* doTitle = new QLabel("输出 DO (点击标签切换)", this);
     doTitle->setStyleSheet("color:#90a4ae; font-size:10px; margin-top:4px;");
     mainLayout->addWidget(doTitle);
 
@@ -65,8 +66,11 @@ void IoMonitorWidget::setupUI()
     for (int i = 0; i < DO_COUNT; ++i) {
         QLabel* lbl = new QLabel("O " + (i < doNames.size() ? doNames[i] : QString("DO_%1").arg(i + 1)), this);
         lbl->setMinimumHeight(26);
+        lbl->setCursor(Qt::PointingHandCursor);
+        lbl->setToolTip("点击切换DO输出状态");
         lbl->setStyleSheet(
             "background:#333; color:#888; padding:3px 14px; border-radius:2px; font-size:10px;");
+        lbl->installEventFilter(this);   // 拦截鼠标点击
         doLayout->addWidget(lbl);
         m_doLabels.append(lbl);
     }
@@ -85,7 +89,25 @@ void IoMonitorWidget::onDiChanged(int id, int value)
 void IoMonitorWidget::onDoChanged(int id, int value)
 {
     if (id < 1 || id > DO_COUNT) return;
+    m_doValues[id] = static_cast<short>(value);
     updateLabelStyle(m_doLabels[id - 1], IO_TYPE_DO, value);
+}
+
+bool IoMonitorWidget::eventFilter(QObject* obj, QEvent* event)
+{
+    if (event->type() == QEvent::MouseButtonPress) {
+        for (int i = 0; i < m_doLabels.size(); ++i) {
+            if (obj == m_doLabels[i]) {
+                int doId = i + 1;
+                int newVal = m_doValues[doId] ? 0 : 1;
+                m_doValues[doId] = newVal;
+                updateLabelStyle(m_doLabels[i], IO_TYPE_DO, newVal);
+                emit doToggleRequested(doId, newVal);
+                return true;
+            }
+        }
+    }
+    return QWidget::eventFilter(obj, event);
 }
 
 void IoMonitorWidget::refreshAll(const QVector<IoSignal>& diSignals, const QVector<IoSignal>& doSignals)
